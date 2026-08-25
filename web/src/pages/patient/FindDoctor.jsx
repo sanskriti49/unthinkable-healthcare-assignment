@@ -15,17 +15,36 @@ import {
   Sparkles,
 } from 'lucide-react';
 
-function summariseHours(workingHours) {
-  if (!workingHours?.length) return 'Hours not published';
+function formatDoctorSchedule(workingHours) {
+  if (!workingHours?.length) return 'Hours upon request';
+
+  // Group windows per day
   const byDay = new Map();
   for (const h of workingHours) {
     if (!byDay.has(h.dayOfWeek)) byDay.set(h.dayOfWeek, []);
     byDay.get(h.dayOfWeek).push(`${h.startTime}–${h.endTime}`);
   }
-  return [...byDay.entries()]
-    .sort((a, b) => a[0] - b[0])
-    .map(([day, windows]) => `${DAY_SHORT[day]} ${windows.join(', ')}`)
-    .join(' · ');
+
+  // Group identical window schedules
+  const bySchedule = new Map();
+  for (const [day, windows] of byDay.entries()) {
+    const key = windows.join(', ');
+    if (!bySchedule.has(key)) bySchedule.set(key, []);
+    bySchedule.get(key).push(day);
+  }
+
+  const parts = [];
+  for (const [windowStr, days] of bySchedule.entries()) {
+    days.sort((a, b) => a - b);
+    const isConsecutive = days.length >= 3 && days.every((d, i) => i === 0 || d === days[i - 1] + 1);
+    const dayLabel = isConsecutive
+      ? `${DAY_SHORT[days[0]]}–${DAY_SHORT[days[days.length - 1]]}`
+      : days.map((d) => DAY_SHORT[d]).join(', ');
+
+    parts.push(`${dayLabel} (${windowStr})`);
+  }
+
+  return parts.join(' · ');
 }
 
 export default function FindDoctor() {
@@ -71,7 +90,7 @@ export default function FindDoctor() {
           <button
             type="button"
             onClick={() => setFilter({ ...filter, specialisation: '' })}
-            className={`rounded-full px-3.5 py-1.5 text-xs font-semibold whitespace-nowrap transition-all ${
+            className={`rounded-full px-3.5 py-1.5 text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
               filter.specialisation === ''
                 ? 'bg-teal-600 text-white shadow-xs'
                 : 'bg-slate-100 text-slate-600 hover:bg-slate-200/80'
@@ -84,7 +103,7 @@ export default function FindDoctor() {
               key={s.name}
               type="button"
               onClick={() => setFilter({ ...filter, specialisation: s.name })}
-              className={`rounded-full px-3.5 py-1.5 text-xs font-semibold whitespace-nowrap transition-all ${
+              className={`rounded-full px-3.5 py-1.5 text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
                 filter.specialisation === s.name
                   ? 'bg-teal-600 text-white shadow-xs'
                   : 'bg-slate-100 text-slate-600 hover:bg-slate-200/80'
@@ -142,7 +161,7 @@ export default function FindDoctor() {
                       <Stethoscope className="w-6 h-6" />
                     </div>
                     <div>
-                      <h2 className="text-lg font-bold text-slate-900">Dr. {doctor.fullName}</h2>
+                      <h2 className="text-lg font-bold text-slate-900 font-display">Dr. {doctor.fullName}</h2>
                       <p className="text-xs font-semibold text-teal-700">{doctor.specialisation}</p>
                       {doctor.qualifications && (
                         <p className="text-2xs text-slate-500 font-medium">{doctor.qualifications}</p>
@@ -163,8 +182,8 @@ export default function FindDoctor() {
                   <div className="flex items-center gap-2">
                     <Coins className="w-4 h-4 text-emerald-600 shrink-0" />
                     <div>
-                      <span className="text-2xs text-slate-400 block">Consultation Fee</span>
-                      <span className="font-semibold text-slate-800">{formatFee(doctor.consultationFee)}</span>
+                      <span className="text-2xs text-slate-400 block font-medium">Consultation Fee</span>
+                      <span className="font-bold text-slate-900 font-mono">{formatFee(doctor.consultationFee)}</span>
                     </div>
                   </div>
 
@@ -172,16 +191,22 @@ export default function FindDoctor() {
                     <div className="flex items-center gap-2">
                       <MapPin className="w-4 h-4 text-sky-600 shrink-0" />
                       <div>
-                        <span className="text-2xs text-slate-400 block">Location</span>
-                        <span className="font-semibold text-slate-800">Room {doctor.roomNumber}</span>
+                        <span className="text-2xs text-slate-400 block font-medium">Location</span>
+                        <span className="font-bold text-slate-900">Room {doctor.roomNumber}</span>
                       </div>
                     </div>
                   )}
                 </div>
 
-                <div className="mt-3 text-2xs text-slate-500 flex items-start gap-1.5">
-                  <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" />
-                  <span>{summariseHours(doctor.workingHours)}</span>
+                {/* Clean Working Hours Badge */}
+                <div className="mt-3.5 flex items-center gap-2 rounded-xl bg-teal-50/50 p-2.5 border border-teal-100/70 text-xs text-slate-700">
+                  <Clock className="w-3.5 h-3.5 text-teal-600 shrink-0" />
+                  <div className="min-w-0">
+                    <span className="font-semibold text-slate-800 text-2xs block text-slate-500 uppercase tracking-wider">Weekly Availability</span>
+                    <span className="font-medium text-slate-700 text-xs font-mono truncate block">
+                      {formatDoctorSchedule(doctor.workingHours)}
+                    </span>
+                  </div>
                 </div>
               </div>
 

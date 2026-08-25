@@ -17,6 +17,31 @@ import {
   Search,
 } from 'lucide-react';
 
+function formatDoctorSchedule(workingHours) {
+  if (!workingHours?.length) return 'No shifts scheduled';
+  const byDay = new Map();
+  for (const h of workingHours) {
+    if (!byDay.has(h.dayOfWeek)) byDay.set(h.dayOfWeek, []);
+    byDay.get(h.dayOfWeek).push(`${h.startTime}–${h.endTime}`);
+  }
+  const bySchedule = new Map();
+  for (const [day, windows] of byDay.entries()) {
+    const key = windows.join(', ');
+    if (!bySchedule.has(key)) bySchedule.set(key, []);
+    bySchedule.get(key).push(day);
+  }
+  const parts = [];
+  for (const [windowStr, days] of bySchedule.entries()) {
+    days.sort((a, b) => a - b);
+    const isConsecutive = days.length >= 3 && days.every((d, i) => i === 0 || d === days[i - 1] + 1);
+    const dayLabel = isConsecutive
+      ? `${DAY_SHORT[days[0]]}–${DAY_SHORT[days[days.length - 1]]}`
+      : days.map((d) => DAY_SHORT[d]).join(', ');
+    parts.push(`${dayLabel} (${windowStr})`);
+  }
+  return parts.join(' · ');
+}
+
 export default function AdminDoctors() {
   const [doctors, setDoctors] = useState(null);
   const [error, setError] = useState(null);
@@ -107,7 +132,7 @@ export default function AdminDoctors() {
                   <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-teal-50 text-teal-700 font-bold text-xs border border-teal-200/60">
                     <Stethoscope className="w-4 h-4" />
                   </div>
-                  <h2 className="font-bold text-base text-slate-900">Dr. {doctor.user.fullName}</h2>
+                  <h2 className="font-bold text-base text-slate-900 font-display">Dr. {doctor.user.fullName}</h2>
                   <Badge tone="brand">{doctor.specialisation}</Badge>
                   {!doctor.user.isActive && <Badge tone="red">Deactivated</Badge>}
                   {doctor.user.isActive && !doctor.isAcceptingPatients && (
@@ -123,7 +148,7 @@ export default function AdminDoctors() {
                   </div>
                   <div>
                     <dt className="text-2xs text-slate-400 font-medium uppercase">Consultation Fee</dt>
-                    <dd className="font-bold text-slate-800">{formatFee(doctor.consultationFee)}</dd>
+                    <dd className="font-bold text-slate-800 font-mono">{formatFee(doctor.consultationFee)}</dd>
                   </div>
                   <div>
                     <dt className="text-2xs text-slate-400 font-medium uppercase">Booking Horizon</dt>
@@ -136,12 +161,8 @@ export default function AdminDoctors() {
 
                   <div className="col-span-full pt-1">
                     <dt className="text-2xs text-slate-400 font-medium uppercase">Weekly Working Hours</dt>
-                    <dd className="text-xs text-slate-700 font-mono">
-                      {doctor.workingHours.length === 0
-                        ? 'No shifts scheduled'
-                        : doctor.workingHours
-                            .map((h) => `${DAY_SHORT[h.dayOfWeek]} ${h.startTime}–${h.endTime}`)
-                            .join(' · ')}
+                    <dd className="text-xs text-slate-700 font-mono font-medium">
+                      {formatDoctorSchedule(doctor.workingHours)}
                     </dd>
                   </div>
                 </dl>
