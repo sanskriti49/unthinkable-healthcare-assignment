@@ -19,9 +19,17 @@ const registerSchema = z.object({
     .regex(/[a-zA-Z]/, 'Password must contain a letter')
     .regex(/\d/, 'Password must contain a number'),
   fullName: z.string().min(2).max(120).trim(),
+  role: z.enum(['PATIENT', 'DOCTOR']).default('PATIENT'),
   phone: z.string().max(30).trim().optional(),
   dateOfBirth: z.coerce.date().optional(),
   gender: z.string().max(30).trim().optional(),
+  // Doctor-specific fields
+  specialisation: z.string().max(100).trim().optional(),
+  qualifications: z.string().max(100).trim().optional(),
+  roomNumber: z.string().max(30).trim().optional(),
+  consultationFee: z.number().int().min(0).default(50000),
+  slotDurationMinutes: z.number().int().min(5).max(120).default(30),
+  bio: z.string().max(1000).trim().optional(),
 });
 
 const loginSchema = z.object({
@@ -42,32 +50,78 @@ const publicUser = (user) => ({
 });
 
 /**
- * Self-service registration creates PATIENT accounts only. Doctor and admin
- * accounts are provisioned by an administrator — letting anyone self-register
- * as a doctor would be an obvious hole.
+ * Self-service registration creates PATIENT or DOCTOR accounts.
  */
 router.post(
   '/register',
   validate(registerSchema),
   asyncHandler(async (req, res) => {
-    const { email, password, fullName, phone, dateOfBirth, gender } = req.body;
+    const {
+      email,
+      password,
+      fullName,
+      role,
+      phone,
+      dateOfBirth,
+      gender,
+      specialisation,
+      qualifications,
+      roomNumber,
+      consultationFee,
+      slotDurationMinutes,
+      bio,
+    } = req.body;
 
     const existing = await prisma.user.findUnique({ where: { email } });
     if (existing) throw conflict('EMAIL_TAKEN', 'An account with that email already exists');
 
-    const user = await prisma.user.create({
-      data: {
-        email,
-        passwordHash: await bcrypt.hash(password, 10),
-        fullName,
-        phone: phone ?? null,
-        dateOfBirth: dateOfBirth ?? null,
-        gender: gender ?? null,
-        role: 'PATIENT',
-      },
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    const user = await prisma.$transaction(async (tx) => {
+      const u = await tx.user.create({
+        data: {
+          email,
+          passwordHash,
+          fullName,
+          phone: phone ?? null,
+          dateOfBirth: dateOfBirth ?? null,
+          gender: gender ?? null,
+          role: role ?? 'PATIENT',
+        },
+      });
+
+      if (role === 'DOCTOR') {
+        const doctorProfile = await tx.doctorProfile.create({
+          data: {
+            userId: u.id,
+            specialisation: specialisation || 'General Medicine',
+            qualifications: qualifications || 'MBBS',
+            roomNumber: roomNumber || null,
+            consultationFee: consultationFee ?? 50000,
+            slotDurationMinutes: slotDurationMinutes ?? 30,
+            bookingHorizonDays: 30,
+            bio: bio || null,
+            isAcceptingPatients: true,
+          },
+        });
+
+        // Default clinic hours: Monday to Friday 09:00 - 17:00
+        const defaultHours = [1, 2, 3, 4, 5].flatMap((dayOfWeek) => [
+          { dayOfWeek, startTime: '09:00', endTime: '13:00', doctorId: doctorProfile.id },
+          { dayOfWeek, startTime: '14:00', endTime: '17:00', doctorId: doctorProfile.id },
+        ]);
+
+        await tx.workingHours.createMany({
+          data: defaultHours,
+        });
+
+        return { ...u, doctorProfile };
+      }
+
+      return u;
     });
 
-    await queueEmail({ to: email, template: 'welcome', data: { fullName, role: 'PATIENT' } });
+    await queueEmail({ to: email, template: 'welcome', data: { fullName, role: user.role } }).catch(() => {});
 
     res.status(201).json({ token: signToken(user), user: publicUser(user) });
   })
@@ -84,8 +138,6 @@ router.post(
       include: { doctorProfile: { select: { id: true, specialisation: true } } },
     });
 
-    // Same response whether the email is unknown or the password is wrong, so
-    // the endpoint cannot be used to enumerate registered addresses.
     if (!user || !(await bcrypt.compare(password, user.passwordHash))) {
       throw unauthorized('Incorrect email or password');
     }
