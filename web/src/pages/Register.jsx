@@ -3,17 +3,7 @@ import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/auth.jsx';
 import { ErrorBanner, Field } from '../components/ui.jsx';
 import { useToast } from '../components/Toast.jsx';
-import {
-  HeartPulse,
-  User,
-  Mail,
-  Lock,
-  Phone,
-  Calendar,
-  ArrowRight,
-  ShieldCheck,
-  CheckCircle2,
-} from 'lucide-react';
+import { HeartPulse } from 'lucide-react';
 
 export default function Register() {
   const { register, user, loading } = useAuth();
@@ -51,80 +41,68 @@ export default function Register() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col justify-center bg-gradient-to-b from-slate-50 via-teal-50/20 to-slate-100 px-4 py-12 sm:px-6 lg:px-8">
-      <div className="mx-auto w-full max-w-lg">
+    <div className="min-h-screen flex flex-col justify-center bg-slate-50 px-4 py-12 sm:px-6">
+      <div className="mx-auto w-full max-w-md">
         <div className="text-center mb-6">
-          <Link to="/login" className="inline-flex items-center justify-center p-3 rounded-2xl bg-gradient-to-tr from-teal-700 to-teal-500 text-white shadow-lg shadow-teal-600/25 mb-3">
-            <HeartPulse className="w-7 h-7" />
-          </Link>
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Create Patient Account</h1>
+          <div className="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-teal-700 text-white mb-3">
+            <HeartPulse className="w-6 h-6" />
+          </div>
+          <h1 className="text-xl font-semibold text-slate-900">Create Patient Account</h1>
           <p className="mt-1 text-xs text-slate-500">
-            Register to consult with clinic specialists and manage prescriptions.
+            Register to book specialist appointments and manage care plans
           </p>
         </div>
 
-        <form onSubmit={submit} className="card space-y-4 p-6 sm:p-8 shadow-sm">
+        <form onSubmit={submit} className="card p-6 bg-white space-y-4 shadow-xs">
           <ErrorBanner error={error} />
 
-          <Field label="Full Name" required>
-            <div className="relative">
-              <User className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
-              <input
-                required
-                minLength={2}
-                className="input pl-9"
-                value={form.fullName}
-                onChange={set('fullName')}
-                placeholder="e.g. Priya Sharma"
-              />
-            </div>
+          <Field label="Full name" required>
+            <input
+              required
+              minLength={2}
+              className="input"
+              value={form.fullName}
+              onChange={set('fullName')}
+              placeholder="e.g. Priya Sharma"
+            />
           </Field>
 
-          <Field label="Email Address" required>
-            <div className="relative">
-              <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
-              <input
-                type="email"
-                required
-                autoComplete="email"
-                className="input pl-9"
-                value={form.email}
-                onChange={set('email')}
-                placeholder="priya@example.com"
-              />
-            </div>
+          <Field label="Email address" required>
+            <input
+              type="email"
+              required
+              autoComplete="email"
+              className="input"
+              value={form.email}
+              onChange={set('email')}
+              placeholder="priya@example.com"
+            />
           </Field>
 
-          <Field label="Password" required hint="At least 8 characters, including a letter and a number.">
-            <div className="relative">
-              <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
-              <input
-                type="password"
-                required
-                minLength={8}
-                autoComplete="new-password"
-                className="input pl-9"
-                value={form.password}
-                onChange={set('password')}
-                placeholder="••••••••"
-              />
-            </div>
+          <Field label="Password" required hint="At least 8 characters (letters and numbers).">
+            <input
+              type="password"
+              required
+              minLength={8}
+              autoComplete="new-password"
+              className="input"
+              value={form.password}
+              onChange={set('password')}
+              placeholder="••••••••"
+            />
           </Field>
 
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Phone Number">
-              <div className="relative">
-                <Phone className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
-                <input
-                  className="input pl-9"
-                  value={form.phone}
-                  onChange={set('phone')}
-                  placeholder="+91 98765 43210"
-                />
-              </div>
+            <Field label="Phone number">
+              <input
+                className="input"
+                value={form.phone}
+                onChange={set('phone')}
+                placeholder="+91 98765 43210"
+              />
             </Field>
 
-            <Field label="Date of Birth" hint="Helps doctor with dosage.">
+            <Field label="Date of birth">
               <input
                 type="date"
                 className="input"
@@ -136,21 +114,21 @@ export default function Register() {
 
           <Field label="Gender">
             <select className="input" value={form.gender} onChange={set('gender')}>
-              <option value="">Prefer not to say</option>
+              <option value="">Select gender</option>
               <option>Female</option>
               <option>Male</option>
               <option>Other</option>
+              <option>Prefer not to say</option>
             </select>
           </Field>
 
-          <button type="submit" className="btn-primary w-full py-2.5 mt-2" disabled={busy}>
-            {busy ? 'Creating account…' : 'Complete Registration'}
-            <ArrowRight className="w-4 h-4" />
+          <button type="submit" className="btn-primary w-full py-2 mt-2" disabled={busy}>
+            {busy ? 'Creating account…' : 'Create account'}
           </button>
 
-          <div className="pt-3 text-center border-t border-slate-100 text-sm text-slate-500">
+          <div className="pt-4 text-center border-t border-slate-100 text-xs text-slate-500">
             Already have an account?{' '}
-            <Link to="/login" className="font-semibold text-teal-700 hover:text-teal-800 hover:underline">
+            <Link to="/login" className="font-medium text-teal-700 hover:text-teal-800">
               Sign in
             </Link>
           </div>
