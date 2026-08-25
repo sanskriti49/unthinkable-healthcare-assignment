@@ -54,8 +54,8 @@ export default function Register() {
               specialisation: form.specialisation.trim() || 'General Medicine',
               qualifications: form.qualifications.trim() || 'MBBS',
               roomNumber: form.roomNumber.trim() || undefined,
-              consultationFee: form.consultationFee,
-              slotDurationMinutes: form.slotDurationMinutes,
+              consultationFee: Number(form.consultationFee),
+              slotDurationMinutes: Number(form.slotDurationMinutes),
               bio: form.bio.trim() || undefined,
             }),
       };

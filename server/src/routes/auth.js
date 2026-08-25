@@ -27,8 +27,8 @@ const registerSchema = z.object({
   specialisation: z.string().max(100).trim().optional(),
   qualifications: z.string().max(100).trim().optional(),
   roomNumber: z.string().max(30).trim().optional(),
-  consultationFee: z.number().int().min(0).default(50000),
-  slotDurationMinutes: z.number().int().min(5).max(120).default(30),
+  consultationFee: z.coerce.number().int().min(0).default(50000),
+  slotDurationMinutes: z.coerce.number().int().min(5).max(120).default(30),
   bio: z.string().max(1000).trim().optional(),
 });
 
