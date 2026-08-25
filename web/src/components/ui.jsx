@@ -16,15 +16,12 @@ import {
   FileQuestion,
 } from 'lucide-react';
 
-/** Loading spinner with clean medical brand styling */
+/** Loading spinner with clean medical styling */
 export function Spinner({ label = 'Loading…', className = '' }) {
   return (
-    <div className={`flex flex-col items-center justify-center gap-3 py-12 text-slate-500 ${className}`} role="status">
-      <div className="relative flex items-center justify-center">
-        <div className="w-9 h-9 rounded-full border-2 border-brand-100 border-t-brand-600 animate-spin" />
-        <div className="absolute w-4 h-4 rounded-full bg-brand-50" />
-      </div>
-      <span className="text-sm font-medium text-slate-600">{label}</span>
+    <div className={`flex flex-col items-center justify-center gap-2.5 py-12 text-slate-400 ${className}`} role="status">
+      <div className="w-7 h-7 rounded-full border-2 border-slate-200 border-t-teal-600 animate-spin" />
+      <span className="text-xs font-medium text-slate-500">{label}</span>
     </div>
   );
 }
@@ -35,13 +32,13 @@ export function ErrorBanner({ error, onRetry, className = '' }) {
   const details = Array.isArray(error.details) ? error.details : null;
 
   return (
-    <div className={`rounded-xl border border-red-200 bg-red-50/90 p-4 text-red-900 shadow-sm ${className}`} role="alert">
-      <div className="flex items-start gap-3">
-        <AlertCircle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
+    <div className={`rounded-xl border border-red-200/80 bg-red-50/80 p-3.5 text-red-900 text-xs ${className}`} role="alert">
+      <div className="flex items-start gap-2.5">
+        <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold">{error.message ?? 'An unexpected error occurred'}</p>
+          <p className="font-semibold">{error.message ?? 'An error occurred'}</p>
           {details && details.length > 0 && (
-            <ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-red-700">
+            <ul className="mt-1.5 list-disc space-y-0.5 pl-4 text-2xs text-red-700">
               {details.map((d, i) => (
                 <li key={i}>
                   {d.field && d.field !== '(root)' ? <span className="font-semibold">{d.field}: </span> : null}
@@ -54,9 +51,9 @@ export function ErrorBanner({ error, onRetry, className = '' }) {
             <button
               type="button"
               onClick={onRetry}
-              className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-red-300 bg-white px-3 py-1.5 text-xs font-semibold text-red-700 shadow-xs hover:bg-red-50 transition-colors"
+              className="mt-2.5 inline-flex items-center gap-1 rounded-lg border border-red-200 bg-white px-2.5 py-1 text-2xs font-semibold text-red-700 hover:bg-red-50"
             >
-              <RefreshCw className="w-3.5 h-3.5" />
+              <RefreshCw className="w-3 h-3" />
               Try again
             </button>
           )}
@@ -69,94 +66,64 @@ export function ErrorBanner({ error, onRetry, className = '' }) {
 /** Empty state component with customizable icon, title, description, and action */
 export function EmptyState({ icon: Icon = FileQuestion, title, description, action, className = '' }) {
   return (
-    <div className={`card flex flex-col items-center justify-center gap-3 px-6 py-12 text-center ${className}`}>
-      <div className="grid h-12 w-12 place-items-center rounded-2xl bg-slate-100 text-slate-400 border border-slate-200/60 shadow-xs">
-        <Icon className="w-6 h-6" />
+    <div className={`card flex flex-col items-center justify-center gap-2.5 px-6 py-10 text-center ${className}`}>
+      <div className="grid h-10 w-10 place-items-center rounded-xl bg-slate-50 text-slate-400 border border-slate-200/70">
+        <Icon className="w-5 h-5" />
       </div>
-      <div className="max-w-md">
-        <p className="font-semibold text-slate-800 text-base">{title}</p>
-        {description && <p className="mt-1 text-sm text-slate-500 leading-relaxed">{description}</p>}
+      <div className="max-w-sm">
+        <p className="font-semibold text-slate-800 text-sm">{title}</p>
+        {description && <p className="mt-1 text-xs text-slate-500 leading-relaxed">{description}</p>}
       </div>
-      {action && <div className="mt-2">{action}</div>}
+      {action && <div className="mt-1">{action}</div>}
     </div>
   );
 }
 
 const BADGE_CONFIG = {
-  slate: {
-    bg: 'bg-slate-100/90 text-slate-700 border-slate-200',
-    dot: 'bg-slate-400',
-  },
-  green: {
-    bg: 'bg-emerald-50 text-emerald-800 border-emerald-200/70',
-    dot: 'bg-emerald-500',
-  },
-  amber: {
-    bg: 'bg-amber-50 text-amber-800 border-amber-200/70',
-    dot: 'bg-amber-500',
-  },
-  red: {
-    bg: 'bg-red-50 text-red-800 border-red-200/70',
-    dot: 'bg-red-500',
-  },
-  blue: {
-    bg: 'bg-sky-50 text-sky-800 border-sky-200/70',
-    dot: 'bg-sky-500',
-  },
-  brand: {
-    bg: 'bg-teal-50 text-teal-900 border-teal-200/80 font-semibold',
-    dot: 'bg-teal-600',
-  },
-  purple: {
-    bg: 'bg-purple-50 text-purple-800 border-purple-200/70',
-    dot: 'bg-purple-500',
-  },
+  slate: 'bg-slate-100 text-slate-700 border-slate-200/70',
+  green: 'bg-emerald-50 text-emerald-700 border-emerald-200/70',
+  amber: 'bg-amber-50 text-amber-800 border-amber-200/70',
+  red: 'bg-red-50 text-red-700 border-red-200/70',
+  blue: 'bg-sky-50 text-sky-700 border-sky-200/70',
+  brand: 'bg-teal-50 text-teal-800 border-teal-200/80',
+  purple: 'bg-purple-50 text-purple-700 border-purple-200/70',
 };
 
-export function Badge({ tone = 'slate', children, dot = true, className = '' }) {
-  const cfg = BADGE_CONFIG[tone] || BADGE_CONFIG.slate;
+export function Badge({ tone = 'slate', children, className = '' }) {
+  const toneClass = BADGE_CONFIG[tone] || BADGE_CONFIG.slate;
   return (
     <span
-      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium tracking-tight shadow-2xs ${cfg.bg} ${className}`}
+      className={`inline-flex items-center rounded-md border px-2 py-0.5 text-[11px] font-medium leading-none ${toneClass} ${className}`}
     >
-      {dot && <span className={`h-1.5 w-1.5 rounded-full ${cfg.dot}`} />}
       {children}
     </span>
   );
 }
 
 const STATUS_CONFIG = {
-  BOOKED: { tone: 'green', label: 'Confirmed', icon: CheckCircle2 },
-  HELD: { tone: 'amber', label: 'Hold Active', icon: Clock },
-  COMPLETED: { tone: 'blue', label: 'Completed', icon: CheckCircle2 },
-  CANCELLED: { tone: 'red', label: 'Cancelled', icon: XCircle },
-  EXPIRED: { tone: 'slate', label: 'Expired', icon: Clock },
-  NO_SHOW: { tone: 'red', label: 'No Show', icon: AlertTriangle },
+  BOOKED: { tone: 'green', label: 'Confirmed' },
+  HELD: { tone: 'amber', label: 'Hold Active' },
+  COMPLETED: { tone: 'slate', label: 'Completed' },
+  CANCELLED: { tone: 'red', label: 'Cancelled' },
+  EXPIRED: { tone: 'slate', label: 'Expired' },
+  NO_SHOW: { tone: 'red', label: 'No Show' },
 };
 
 export function StatusBadge({ status }) {
   const cfg = STATUS_CONFIG[status] || { tone: 'slate', label: String(status || '').toLowerCase() };
-  return (
-    <Badge tone={cfg.tone}>
-      {cfg.label}
-    </Badge>
-  );
+  return <Badge tone={cfg.tone}>{cfg.label}</Badge>;
 }
 
 const URGENCY_CONFIG = {
-  HIGH: { tone: 'red', label: 'High Urgency', border: 'border-red-300' },
-  MEDIUM: { tone: 'amber', label: 'Medium Urgency', border: 'border-amber-300' },
-  LOW: { tone: 'green', label: 'Low Urgency', border: 'border-emerald-300' },
+  HIGH: { tone: 'red', label: 'High Urgency' },
+  MEDIUM: { tone: 'amber', label: 'Medium Urgency' },
+  LOW: { tone: 'slate', label: 'Low Urgency' },
 };
 
 export function UrgencyBadge({ urgency }) {
   if (!urgency) return null;
   const cfg = URGENCY_CONFIG[urgency] || { tone: 'slate', label: urgency };
-  return (
-    <Badge tone={cfg.tone} className="font-semibold">
-      {cfg.label}
-    </Badge>
-  );
+  return <Badge tone={cfg.tone}>{cfg.label}</Badge>;
 }
 
 /**
@@ -167,35 +134,35 @@ export function SourceNote({ source, className = '' }) {
   
   if (source === 'LLM') {
     return (
-      <span className={`inline-flex items-center gap-1.5 rounded-full border border-teal-300 bg-teal-50 px-2.5 py-0.5 text-xs font-semibold text-teal-800 shadow-2xs ${className}`}>
-        <Sparkles className="w-3.5 h-3.5 text-teal-600 animate-pulse-subtle" />
-        AI-Generated Summary
+      <span className={`inline-flex items-center gap-1.5 rounded-md border border-teal-200 bg-teal-50 px-2 py-0.5 text-[11px] font-medium text-teal-800 ${className}`}>
+        <Sparkles className="w-3 h-3 text-teal-600" />
+        AI-Generated
       </span>
     );
   }
   
   if (source === 'HEURISTIC') {
     return (
-      <span className={`inline-flex items-center gap-1.5 rounded-full border border-amber-300 bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-800 ${className}`}>
-        <Info className="w-3.5 h-3.5 text-amber-600" />
-        AI Fallback (Automated Rule-Based)
+      <span className={`inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600 ${className}`}>
+        <Info className="w-3 h-3 text-slate-500" />
+        Rule-Based Fallback
       </span>
     );
   }
 
   if (source === 'PENDING') {
     return (
-      <span className={`inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-xs text-slate-600 ${className}`}>
-        <Clock className="w-3.5 h-3.5 text-slate-400" />
-        Generating summary…
+      <span className={`inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] text-slate-500 ${className}`}>
+        <Clock className="w-3 h-3 text-slate-400" />
+        Generating…
       </span>
     );
   }
 
   return (
-    <span className={`inline-flex items-center gap-1.5 rounded-full border border-red-200 bg-red-50 px-2.5 py-0.5 text-xs text-red-700 ${className}`}>
-      <AlertCircle className="w-3.5 h-3.5" />
-      Generation Failed
+    <span className={`inline-flex items-center gap-1 rounded-md border border-red-200 bg-red-50 px-2 py-0.5 text-[11px] text-red-700 ${className}`}>
+      <AlertCircle className="w-3 h-3" />
+      Failed
     </span>
   );
 }
@@ -203,19 +170,19 @@ export function SourceNote({ source, className = '' }) {
 /** Top page header with title, subtitle, and action buttons */
 export function PageHeader({ title, description, badge, action, icon: Icon }) {
   return (
-    <div className="mb-6 flex flex-wrap items-start justify-between gap-4 pb-2 border-b border-slate-200/60">
+    <div className="mb-6 flex flex-wrap items-start justify-between gap-3 pb-3 border-b border-slate-200/60">
       <div className="flex items-start gap-3">
         {Icon && (
-          <div className="mt-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-teal-50 text-teal-700 border border-teal-200/60 shadow-2xs">
-            <Icon className="w-5 h-5" />
+          <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-teal-50 text-teal-700 border border-teal-200/60">
+            <Icon className="w-4 h-4" />
           </div>
         )}
         <div>
-          <div className="flex items-center gap-2.5">
-            <h1 className="text-2xl font-bold tracking-tight text-slate-900">{title}</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl font-bold tracking-tight text-slate-900">{title}</h1>
             {badge}
           </div>
-          {description && <p className="mt-1 text-sm text-slate-500">{description}</p>}
+          {description && <p className="mt-0.5 text-xs text-slate-500">{description}</p>}
         </div>
       </div>
       {action && <div className="flex items-center gap-2">{action}</div>}
@@ -233,27 +200,27 @@ export function Stat({ label, value, hint, icon: Icon, tone = 'slate', trend }) 
   }[tone] || 'text-slate-900';
 
   const toneBg = {
-    slate: 'bg-slate-100 text-slate-600',
+    slate: 'bg-slate-50 text-slate-600',
     red: 'bg-red-50 text-red-600',
     green: 'bg-emerald-50 text-emerald-600',
     brand: 'bg-teal-50 text-teal-700',
-  }[tone] || 'bg-slate-100 text-slate-600';
+  }[tone] || 'bg-slate-50 text-slate-600';
 
   return (
-    <div className="card p-5 card-hover relative overflow-hidden">
+    <div className="card p-5 relative overflow-hidden">
       <div className="flex items-start justify-between">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">{label}</p>
-          <p className={`mt-2 text-3xl font-extrabold tracking-tight ${toneText}`}>{value}</p>
+          <p className="text-2xs font-semibold uppercase tracking-wider text-slate-400">{label}</p>
+          <p className={`mt-1.5 text-2xl font-bold tracking-tight ${toneText}`}>{value}</p>
         </div>
         {Icon && (
-          <div className={`grid h-10 w-10 place-items-center rounded-xl border border-black/5 ${toneBg}`}>
-            <Icon className="w-5 h-5" />
+          <div className={`grid h-9 w-9 place-items-center rounded-xl border border-slate-100 ${toneBg}`}>
+            <Icon className="w-4 h-4" />
           </div>
         )}
       </div>
       {(hint || trend) && (
-        <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-2.5 text-xs text-slate-500">
+        <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-2 text-xs text-slate-400">
           <span>{hint}</span>
           {trend && <span className="font-medium text-emerald-600">{trend}</span>}
         </div>
@@ -273,8 +240,8 @@ export function Field({ label, hint, error, children, required, className = '' }
         </label>
       )}
       {children}
-      {hint && !error && <p className="mt-1.5 text-xs text-slate-500">{hint}</p>}
-      {error && <p className="mt-1.5 text-xs font-medium text-red-600 flex items-center gap-1"><AlertCircle className="w-3.5 h-3.5 shrink-0" />{error}</p>}
+      {hint && !error && <p className="mt-1 text-xs text-slate-400">{hint}</p>}
+      {error && <p className="mt-1 text-xs font-medium text-red-600 flex items-center gap-1"><AlertCircle className="w-3.5 h-3.5 shrink-0" />{error}</p>}
     </div>
   );
 }
