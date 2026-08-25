@@ -1,0 +1,22 @@
+# Local Postgres for development. The app itself runs on the host with `npm run dev`.
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: healthcare-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: healthcare
+      POSTGRES_PASSWORD: healthcare
+      POSTGRES_DB: healthcare
+    ports:
+      - "5432:5432"
+    volumes:
+      - healthcare-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U healthcare -d healthcare"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  healthcare-pgdata:

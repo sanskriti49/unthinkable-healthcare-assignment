@@ -1,0 +1,442 @@
+// Healthcare Appointment & Follow-up Manager — data model
+//
+// The correctness guarantee for booking lives in this file plus the raw-SQL
+// migration `20250101000001_booking_guards`, which adds a PARTIAL unique index
+// on (doctorId, startsAt) restricted to slot-occupying statuses. Prisma cannot
+// express partial indexes, so it is applied as raw SQL. See docs/DESIGN.md.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  PATIENT
+  DOCTOR
+  ADMIN
+}
+
+enum AppointmentStatus {
+  HELD // slot reserved, awaiting confirmation, expires at holdExpiresAt
+  BOOKED // confirmed
+  COMPLETED // visit finished, notes recorded
+  CANCELLED // cancelled by patient/doctor/admin
+  EXPIRED // hold TTL elapsed without confirmation
+  NO_SHOW
+}
+
+enum CancelledBy {
+  PATIENT
+  DOCTOR
+  ADMIN
+  SYSTEM
+}
+
+enum CancelReason {
+  PATIENT_REQUEST
+  DOCTOR_LEAVE
+  HOLD_EXPIRED
+  RESCHEDULED
+  OTHER
+}
+
+/// How a piece of AI-assisted content came to exist. Every LLM-backed record
+/// carries this so the UI can be honest about degraded output.
+enum GenerationSource {
+  LLM // produced by the model
+  HEURISTIC // produced by the deterministic fallback after LLM failure
+  PENDING // queued, not yet attempted
+  UNAVAILABLE // LLM disabled/failed and no useful fallback could be produced
+}
+
+enum JobStatus {
+  PENDING
+  RUNNING
+  SUCCEEDED
+  FAILED // permanently failed, dead-lettered after maxAttempts
+  CANCELLED
+}
+
+enum CalendarSyncStatus {
+  NOT_CONFIGURED // no Google credentials / user not connected — skipped by design
+  PENDING
+  SYNCED
+  FAILED
+}
+
+enum Urgency {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+// ---------------------------------------------------------------------------
+// Identity
+// ---------------------------------------------------------------------------
+
+model User {
+  id           String  @id @default(uuid())
+  email        String  @unique
+  passwordHash String
+  role         Role    @default(PATIENT)
+  fullName     String
+  phone        String?
+  isActive     Boolean @default(true)
+
+  // Patient-only demographics; null for doctors/admins.
+  dateOfBirth DateTime?
+  gender      String?
+
+  doctorProfile        DoctorProfile?
+  patientAppointments  Appointment[]  @relation("PatientAppointments")
+  calendarAccount      CalendarAccount?
+  medicationReminders  MedicationReminder[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([role])
+}
+
+// ---------------------------------------------------------------------------
+// Doctors, availability and leave
+// ---------------------------------------------------------------------------
+
+model DoctorProfile {
+  id     String @id @default(uuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  specialisation String
+  qualifications String?
+  bio            String?
+  roomNumber     String?
+  consultationFee Int    @default(0) // minor units (paise/cents)
+
+  /// Length of one appointment slot, in minutes. Slots are generated on this
+  /// grid, so it also defines the granularity of the uniqueness guarantee.
+  slotDurationMinutes Int @default(30)
+
+  /// How far ahead patients may book.
+  bookingHorizonDays Int @default(30)
+
+  isAcceptingPatients Boolean @default(true)
+
+  workingHours WorkingHours[]
+  leaves       DoctorLeave[]
+  appointments Appointment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([specialisation])
+}
+
+/// A recurring weekly availability window. A doctor may have several per day
+/// (e.g. a morning and an evening clinic).
+model WorkingHours {
+  id       String        @id @default(uuid())
+  doctorId String
+  doctor   DoctorProfile @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+
+  /// 0 = Sunday … 6 = Saturday, matching JS getUTCDay().
+  dayOfWeek Int
+
+  /// Local clinic time, "HH:MM" 24h. Interpreted in the clinic timezone
+  /// (CLINIC_TIMEZONE env var) when expanded into concrete slots.
+  startTime String
+  endTime   String
+
+  isActive Boolean @default(true)
+
+  @@unique([doctorId, dayOfWeek, startTime])
+  @@index([doctorId, dayOfWeek])
+}
+
+/// A whole-day absence. Booking a slot on a leave date is rejected, and marking
+/// leave cancels + notifies any appointments already on that date.
+model DoctorLeave {
+  id       String        @id @default(uuid())
+  doctorId String
+  doctor   DoctorProfile @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+
+  /// Midnight UTC of the clinic-local calendar date.
+  date   DateTime @db.Date
+  reason String?
+
+  createdAt DateTime @default(now())
+
+  @@unique([doctorId, date])
+  @@index([doctorId, date])
+}
+
+// ---------------------------------------------------------------------------
+// Appointments
+// ---------------------------------------------------------------------------
+
+model Appointment {
+  id String @id @default(uuid())
+
+  doctorId String
+  doctor   DoctorProfile @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+
+  patientId String
+  patient   User   @relation("PatientAppointments", fields: [patientId], references: [id], onDelete: Cascade)
+
+  /// Slot start, stored in UTC. Together with doctorId this is the key the
+  /// partial unique index guards.
+  startsAt DateTime
+  endsAt   DateTime
+
+  status AppointmentStatus @default(HELD)
+
+  /// Set while status = HELD. A hold past this instant is treated as free and
+  /// is reaped either by the sweeper job or, deterministically, by the next
+  /// booking transaction for the same slot.
+  holdExpiresAt DateTime?
+
+  /// Opaque token returned to the client that created the hold, so only that
+  /// client can confirm it.
+  holdToken String? @unique
+
+  /// Free-text symptoms captured at confirmation; input to the pre-visit LLM.
+  symptoms      String?
+  patientNotes  String?
+
+  cancelledAt     DateTime?
+  cancelledBy     CancelledBy?
+  cancelReason    CancelReason?
+  cancelNote      String?
+
+  /// Set when this appointment replaced another via reschedule.
+  rescheduledFromId String?      @unique
+  rescheduledFrom   Appointment? @relation("Reschedule", fields: [rescheduledFromId], references: [id])
+  rescheduledTo     Appointment? @relation("Reschedule")
+
+  // Google Calendar linkage — one event per party, since they live in
+  // different calendars and may be connected independently.
+  patientCalendarEventId String?
+  doctorCalendarEventId  String?
+  calendarSyncStatus     CalendarSyncStatus @default(NOT_CONFIGURED)
+  calendarSyncError      String?
+
+  preVisitSummary PreVisitSummary?
+  visitNote       VisitNote?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([doctorId, startsAt])
+  @@index([patientId, startsAt])
+  @@index([status, holdExpiresAt])
+  @@index([startsAt])
+}
+
+// ---------------------------------------------------------------------------
+// LLM feature 1 — pre-visit symptom summary
+// ---------------------------------------------------------------------------
+
+model PreVisitSummary {
+  id            String      @id @default(uuid())
+  appointmentId String      @unique
+  appointment   Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+
+  /// Verbatim patient input the summary was derived from, kept for audit.
+  rawSymptoms String
+
+  chiefComplaint String?
+  summary        String?
+  urgency        Urgency?
+  /// Short justification for the urgency label, shown to the doctor.
+  urgencyRationale String?
+  /// Exactly three suggested questions for the doctor to ask.
+  suggestedQuestions String[] @default([])
+  redFlags           String[] @default([])
+
+  source        GenerationSource @default(PENDING)
+  model         String?
+  attempts      Int              @default(0)
+  lastError     String?
+  generatedAt   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ---------------------------------------------------------------------------
+// LLM feature 2 — post-visit summary and medication schedule
+// ---------------------------------------------------------------------------
+
+model VisitNote {
+  id            String      @id @default(uuid())
+  appointmentId String      @unique
+  appointment   Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+
+  /// Clinical free text authored by the doctor.
+  doctorNotes  String
+  diagnosis    String?
+  /// Raw prescription text as typed by the doctor, e.g.
+  /// "Amoxicillin 500mg 1-0-1 x 5 days after food".
+  prescriptionText String?
+  followUpInDays   Int?
+
+  // LLM-derived, patient-facing.
+  patientSummary   String?
+  careInstructions String[] @default([])
+  warningSigns     String[] @default([])
+
+  source      GenerationSource @default(PENDING)
+  model       String?
+  attempts    Int              @default(0)
+  lastError   String?
+  generatedAt DateTime?
+
+  medications Medication[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+/// One prescribed drug, normalised out of the prescription free text so
+/// reminders can be scheduled from it.
+model Medication {
+  id          String    @id @default(uuid())
+  visitNoteId String
+  visitNote   VisitNote @relation(fields: [visitNoteId], references: [id], onDelete: Cascade)
+
+  name         String
+  dosage       String?
+  /// Human-readable frequency as prescribed, e.g. "twice daily".
+  frequency    String?
+  /// Clinic-local "HH:MM" times of day this drug should be taken.
+  timesOfDay   String[] @default([])
+  durationDays Int      @default(1)
+  instructions String?
+  /// True when timesOfDay came from the deterministic parser rather than the LLM.
+  parsedByFallback Boolean @default(false)
+
+  reminders MedicationReminder[]
+
+  createdAt DateTime @default(now())
+
+  @@index([visitNoteId])
+}
+
+/// A single scheduled "take your medicine" notification. Materialised up front
+/// so the schedule is inspectable and cancellable, with the actual delivery
+/// handled by a Job row.
+model MedicationReminder {
+  id           String     @id @default(uuid())
+  medicationId String
+  medication   Medication @relation(fields: [medicationId], references: [id], onDelete: Cascade)
+
+  patientId String
+  patient   User   @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  scheduledFor DateTime
+  sentAt       DateTime?
+  cancelledAt  DateTime?
+
+  jobId String?
+
+  createdAt DateTime @default(now())
+
+  @@index([patientId, scheduledFor])
+  @@index([scheduledFor, sentAt])
+}
+
+// ---------------------------------------------------------------------------
+// Background jobs — Postgres-backed queue (no Redis dependency)
+// ---------------------------------------------------------------------------
+
+/// Durable job row. Workers claim rows with
+/// `FOR UPDATE SKIP LOCKED`, so multiple workers can run safely.
+model Job {
+  id   String @id @default(uuid())
+  type String
+
+  payload Json
+
+  status   JobStatus @default(PENDING)
+  priority Int       @default(0)
+
+  /// Earliest time this job may run. Backoff is implemented by pushing this
+  /// forward on failure.
+  runAt DateTime @default(now())
+
+  attempts    Int  @default(0)
+  maxAttempts Int  @default(5)
+
+  lastError   String?
+  /// Full error history, newest last — the audit trail for a dead-lettered job.
+  errorLog    Json?
+  lockedAt    DateTime?
+  lockedBy    String?
+  startedAt   DateTime?
+  completedAt DateTime?
+
+  /// Set when a job is retried by an admin, pointing at the original.
+  retryOfId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status, runAt])
+  @@index([type, status])
+}
+
+/// Delivery record for every email the system attempts, successful or not.
+model EmailLog {
+  id String @id @default(uuid())
+
+  to       String
+  subject  String
+  template String
+  /// Rendered body, retained so a failed notification can be inspected/resent.
+  body     String
+
+  status    JobStatus @default(PENDING)
+  attempts  Int       @default(0)
+  lastError String?
+  sentAt    DateTime?
+  /// Message id returned by the transport, or the file path in dev.
+  providerMessageId String?
+
+  appointmentId String?
+  jobId         String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([to, createdAt])
+  @@index([status])
+}
+
+// ---------------------------------------------------------------------------
+// Google Calendar
+// ---------------------------------------------------------------------------
+
+/// Per-user OAuth 2.0 grant for Google Calendar. Absent = that user's events
+/// are simply skipped; the appointment still works.
+model CalendarAccount {
+  id     String @id @default(uuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  provider     String  @default("google")
+  googleEmail  String?
+  accessToken  String
+  refreshToken String?
+  scope        String?
+  expiresAt    DateTime?
+  calendarId   String  @default("primary")
+
+  isActive Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
