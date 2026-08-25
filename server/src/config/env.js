@@ -63,18 +63,21 @@ export const env = {
   },
 
   llm: {
-    /**
-     * Anthropic API key. Intentionally left blank in .env.example — drop your
-     * key in later and the LLM features light up with no code change.
-     */
     apiKey: process.env.ANTHROPIC_API_KEY ?? '',
     baseUrl: process.env.ANTHROPIC_BASE_URL ?? 'https://api.anthropic.com',
     model: process.env.LLM_MODEL ?? 'claude-opus-5',
+    groqApiKey: process.env.GROQ_API_KEY ?? '',
+    groqModel: process.env.GROQ_MODEL ?? 'llama-3.3-70b-versatile',
     maxTokens: int(process.env.LLM_MAX_TOKENS, 1400),
     timeoutMs: int(process.env.LLM_TIMEOUT_MS, 25_000),
     maxAttempts: int(process.env.LLM_MAX_ATTEMPTS, 3),
+    get provider() {
+      if (process.env.ANTHROPIC_API_KEY) return 'anthropic';
+      if (process.env.GROQ_API_KEY && !process.env.GROQ_API_KEY.includes('your_generated')) return 'groq';
+      return null;
+    },
     get enabled() {
-      return Boolean(process.env.ANTHROPIC_API_KEY);
+      return Boolean(this.provider);
     },
   },
 
@@ -137,8 +140,8 @@ export const env = {
 export function integrationStatus() {
   return {
     llm: env.llm.enabled
-      ? { configured: true, model: env.llm.model }
-      : { configured: false, note: 'ANTHROPIC_API_KEY not set — heuristic fallbacks in use' },
+      ? { configured: true, model: env.llm.provider === 'groq' ? env.llm.groqModel : env.llm.model, provider: env.llm.provider }
+      : { configured: false, note: 'No API key set — heuristic fallbacks in use' },
     email:
       env.email.driver === 'smtp'
         ? { configured: true, driver: 'smtp', host: env.email.smtp.host }

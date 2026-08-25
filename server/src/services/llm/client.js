@@ -5,28 +5,25 @@ import { logger } from '../../lib/logger.js';
 
 const log = logger('llm');
 
-let client = null;
+let anthropicClient = null;
 
-function getClient() {
-  if (!env.llm.enabled) return null;
-  if (!client) {
-    client = new Anthropic({
+function getAnthropicClient() {
+  if (env.llm.provider !== 'anthropic') return null;
+  if (!anthropicClient) {
+    anthropicClient = new Anthropic({
       apiKey: env.llm.apiKey,
       baseURL: env.llm.baseUrl,
-      // The TS/JS SDK takes timeout in milliseconds.
       timeout: env.llm.timeoutMs,
-      // The SDK retries 408/409/429/5xx itself; our own attempt loop sits on
-      // top of it and also covers schema-validation failures.
       maxRetries: 1,
     });
   }
-  return client;
+  return anthropicClient;
 }
 
 /** Thrown when the LLM is not configured at all. Callers fall back silently. */
 export class LlmDisabledError extends Error {
   constructor() {
-    super('LLM is not configured (ANTHROPIC_API_KEY is unset)');
+    super('LLM is not configured (ANTHROPIC_API_KEY / GROQ_API_KEY is unset)');
     this.name = 'LlmDisabledError';
     this.disabled = true;
   }
@@ -41,40 +38,96 @@ export class LlmFailureError extends Error {
   }
 }
 
-/** Errors worth trying again: transient network/server/rate-limit conditions. */
 function isRetryable(err) {
   if (err instanceof Anthropic.RateLimitError) return true;
   if (err instanceof Anthropic.APIConnectionError) return true;
   if (err instanceof Anthropic.APIConnectionTimeoutError) return true;
   if (err instanceof Anthropic.InternalServerError) return true;
   if (err instanceof Anthropic.APIError) return err.status >= 500 || err.status === 429;
-  // Undici/fetch aborts and socket errors.
   return ['AbortError', 'TimeoutError', 'FetchError'].includes(err?.name);
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /**
- * Run a structured-output completion and return data validated against `schema`.
- *
- * Two things make this safe to depend on:
- *
- *  1. **Structured outputs.** `output_config.format` constrains generation to
- *     the Zod schema, so we never hand-parse JSON out of prose and never have
- *     to cope with a stray markdown fence. `parsed_output` is either
- *     schema-valid or null.
- *  2. **It throws rather than guesses.** Every caller has a deterministic
- *     fallback; a wrong-but-plausible summary is worse than a missing one in a
- *     clinical setting, so we never fabricate on failure.
- *
- * @param {object} opts
- * @param {string} opts.system      system prompt
- * @param {string} opts.user        user message
- * @param {import('zod').ZodType} opts.schema
- * @param {string} opts.purpose     label for logs
+ * Execute structured output completion using Anthropic or Groq based on configured keys.
  */
 export async function completeStructured({ system, user, schema, purpose, maxTokens }) {
-  const api = getClient();
+  if (!env.llm.enabled) throw new LlmDisabledError();
+
+  const provider = env.llm.provider;
+
+  // 1. Groq Completion
+  if (provider === 'groq') {
+    let lastError;
+    for (let attempt = 1; attempt <= env.llm.maxAttempts; attempt += 1) {
+      const startedAt = Date.now();
+      try {
+        const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${env.llm.groqApiKey}`,
+          },
+          body: JSON.stringify({
+            model: env.llm.groqModel,
+            temperature: 0.1,
+            max_tokens: maxTokens ?? env.llm.maxTokens,
+            response_format: { type: 'json_object' },
+            messages: [
+              {
+                role: 'system',
+                content: `${system}\n\nIMPORTANT: You must respond ONLY with a valid JSON object matching the required structure. Do not wrap in markdown quotes.`,
+              },
+              { role: 'user', content: user },
+            ],
+          }),
+          signal: AbortSignal.timeout(env.llm.timeoutMs),
+        });
+
+        if (!response.ok) {
+          const errBody = await response.text();
+          throw new Error(`Groq API returned ${response.status}: ${errBody}`);
+        }
+
+        const json = await response.json();
+        const rawContent = json.choices?.[0]?.message?.content;
+        if (!rawContent) throw new Error('Groq returned empty completion content');
+
+        const parsedJson = JSON.parse(rawContent);
+        const validated = schema.parse(parsedJson);
+
+        log.info('Groq completion ok', {
+          purpose,
+          attempt,
+          ms: Date.now() - startedAt,
+          model: env.llm.groqModel,
+          tokens: json.usage?.total_tokens,
+        });
+
+        return { data: validated, model: env.llm.groqModel, attempts: attempt };
+      } catch (err) {
+        lastError = err;
+        log.warn('Groq completion failed', {
+          purpose,
+          attempt,
+          error: err?.message,
+        });
+
+        if (attempt === env.llm.maxAttempts) break;
+        const delay = 500 * 2 ** (attempt - 1);
+        await sleep(delay / 2 + Math.random() * (delay / 2));
+      }
+    }
+
+    throw new LlmFailureError(`Groq call failed for ${purpose}: ${lastError?.message ?? 'unknown error'}`, {
+      attempts: env.llm.maxAttempts,
+      cause: lastError,
+    });
+  }
+
+  // 2. Anthropic Completion
+  const api = getAnthropicClient();
   if (!api) throw new LlmDisabledError();
 
   let lastError;
@@ -89,11 +142,9 @@ export async function completeStructured({ system, user, schema, purpose, maxTok
         output_config: { format: zodOutputFormat(schema) },
       });
 
-      // A refusal is a valid HTTP 200. Treat it as a hard failure — do not retry,
-      // the model will refuse again — and let the caller fall back.
       if (response.stop_reason === 'refusal') {
         throw new LlmFailureError(
-          `Model declined the request (${response.stop_details?.category ?? 'unspecified'})`,
+          `Model declined request (${response.stop_details?.category ?? 'unspecified'})`,
           { attempts: attempt }
         );
       }
@@ -102,7 +153,7 @@ export async function completeStructured({ system, user, schema, purpose, maxTok
         throw new Error('Model returned no schema-valid output');
       }
 
-      log.info('completion ok', {
+      log.info('Anthropic completion ok', {
         purpose,
         attempt,
         ms: Date.now() - startedAt,
@@ -117,7 +168,7 @@ export async function completeStructured({ system, user, schema, purpose, maxTok
       if (err instanceof LlmFailureError) throw err;
 
       const retryable = isRetryable(err);
-      log.warn('completion failed', {
+      log.warn('Anthropic completion failed', {
         purpose,
         attempt,
         retryable,
@@ -126,7 +177,6 @@ export async function completeStructured({ system, user, schema, purpose, maxTok
       });
 
       if (!retryable || attempt === env.llm.maxAttempts) break;
-      // Exponential backoff with jitter, same shape as the job queue's.
       const delay = 500 * 2 ** (attempt - 1);
       await sleep(delay / 2 + Math.random() * (delay / 2));
     }
@@ -140,5 +190,5 @@ export async function completeStructured({ system, user, schema, purpose, maxTok
 
 /** Test seam. */
 export function resetClient() {
-  client = null;
+  anthropicClient = null;
 }
