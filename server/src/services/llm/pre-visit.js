@@ -36,7 +36,7 @@ export async function generatePreVisitSummary(appointmentId) {
   const appointment = await prisma.appointment.findUnique({
     where: { id: appointmentId },
     include: {
-      patient: { select: { dateOfBirth: true, gender: true } },
+      patient: { select: { fullName: true, dateOfBirth: true, gender: true } },
       doctor: { select: { specialisation: true } },
       preVisitSummary: true,
     },
@@ -66,6 +66,7 @@ export async function generatePreVisitSummary(appointmentId) {
         system: PRE_VISIT_SYSTEM,
         user: buildPreVisitUser({
           symptoms: rawSymptoms,
+          patientName: appointment.patient.fullName,
           patientAge: ageFrom(appointment.patient.dateOfBirth),
           patientGender: appointment.patient.gender,
           specialisation: appointment.doctor.specialisation,
