@@ -2,10 +2,16 @@ node_modules/
 dist/
 build/
 .env
+**/.env
+.env.*
 .env.local
 .env.*.local
+server/.env
 *.log
 .DS_Store
 .mailbox/
 coverage/
 .vite/
+.agents/
+.neon/
+skills-lock.json

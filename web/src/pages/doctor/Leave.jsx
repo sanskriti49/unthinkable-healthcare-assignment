@@ -1,15 +1,19 @@
-import { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { api, ApiError } from '../../lib/api.js';
 import { formatDate, formatDateTime, todayKey } from '../../lib/format.js';
 import { EmptyState, ErrorBanner, Field, PageHeader, Spinner } from '../../components/ui.jsx';
+import { useToast } from '../../components/Toast.jsx';
+import {
+  CalendarX,
+  AlertTriangle,
+  CheckCircle2,
+  Calendar,
+  Trash2,
+  Users,
+  ShieldAlert,
+  ArrowRight,
+} from 'lucide-react';
 
-/**
- * Leave management.
- *
- * Marking leave on a day that already has patients is destructive, so the flow
- * is deliberately two-step: the first submit comes back with the list of
- * affected patients (HTTP 409), and only an explicit confirmation cancels them.
- */
 export default function DoctorLeave() {
   const [leave, setLeave] = useState(null);
   const [form, setForm] = useState({ date: '', reason: '' });
@@ -17,6 +21,7 @@ export default function DoctorLeave() {
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState(null);
+  const { toast } = useToast();
 
   const load = useCallback(
     () => api.get('/doctor/leave').then((r) => setLeave(r.leave)).catch(setError),
@@ -42,6 +47,7 @@ export default function DoctorLeave() {
       setConflicts(null);
       setResult(response);
       setForm({ date: '', reason: '' });
+      toast('Leave date marked successfully!');
       await load();
     } catch (err) {
       if (err instanceof ApiError && err.code === 'LEAVE_HAS_CONFLICTS') {
@@ -55,9 +61,10 @@ export default function DoctorLeave() {
   }
 
   async function remove(id) {
-    if (!window.confirm('Remove this leave day? Slots become bookable again — already-cancelled appointments are not restored.')) return;
+    if (!window.confirm('Remove this leave day? Slots become bookable again.')) return;
     try {
       await api.del(`/doctor/leave/${id}`);
+      toast('Leave day removed. Slots reopened.');
       await load();
     } catch (err) {
       setError(err);
@@ -65,31 +72,39 @@ export default function DoctorLeave() {
   }
 
   return (
-    <>
+    <div className="space-y-6 animate-in fade-in duration-200">
       <PageHeader
-        title="Leave"
-        description="Block out a day. Patients already booked on it are cancelled and notified with alternative times."
+        title="Leave Planner &amp; Conflict Resolver"
+        description="Schedule time off with automatic conflict detection, patient cancellation, and rescheduling notifications."
+        icon={CalendarX}
       />
 
-      <ErrorBanner error={error} className="mb-4" />
+      <ErrorBanner error={error} />
 
       {result && (
-        <div className="mb-6 rounded-lg border border-emerald-200 bg-emerald-50 p-4">
-          <p className="text-sm font-semibold text-emerald-900">Leave recorded.</p>
-          <p className="mt-0.5 text-sm text-emerald-800">
-            {result.cancelled > 0
-              ? `${result.cancelled} appointment(s) were cancelled and ${result.notified} patient(s) notified by email with alternative slots.`
-              : 'No appointments were affected.'}
-          </p>
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50/90 p-4 text-emerald-950 flex items-start gap-3 shadow-xs">
+          <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-bold">Leave successfully registered.</p>
+            <p className="text-xs text-emerald-800 mt-0.5">
+              {result.cancelled > 0
+                ? `${result.cancelled} existing appointment(s) were safely cancelled and ${result.notified} patient(s) received automated emails with alternative slots.`
+                : 'No existing patient appointments were affected.'}
+            </p>
+          </div>
         </div>
       )}
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <section className="card p-5">
-          <h2 className="mb-4 font-semibold text-slate-900">Mark a day as leave</h2>
+        {/* Mark Leave Form */}
+        <section className="card p-6 border-slate-200/80 bg-white">
+          <h2 className="text-base font-bold text-slate-900 flex items-center gap-2 mb-4">
+            <CalendarX className="w-4 h-4 text-teal-600" />
+            Schedule Leave Day
+          </h2>
 
           <form onSubmit={(e) => submit(e, false)} className="space-y-4">
-            <Field label="Date" required>
+            <Field label="Leave Date" required>
               <input
                 type="date"
                 required
@@ -103,71 +118,115 @@ export default function DoctorLeave() {
               />
             </Field>
 
-            <Field label="Reason" hint="Shown to affected patients in their cancellation email.">
+            <Field label="Reason (Optional)" hint="Included in the notification email sent to affected patients.">
               <input
                 className="input"
                 value={form.reason}
                 onChange={(e) => setForm({ ...form, reason: e.target.value })}
-                placeholder="e.g. Attending a conference"
+                placeholder="e.g. Attending Medical Symposium / Personal leave"
               />
             </Field>
 
             {conflicts ? (
-              <div className="rounded-lg border border-amber-300 bg-amber-50 p-4">
-                <p className="text-sm font-semibold text-amber-900">
-                  {conflicts.appointments.length} patient(s) are booked on {formatDate(`${conflicts.date}T12:00:00Z`)}
-                </p>
-                <ul className="mt-2 space-y-1 text-sm text-amber-800">
+              <div className="rounded-xl border border-amber-300 bg-amber-50/90 p-4 space-y-3 animate-in fade-in">
+                <div className="flex items-start gap-2.5">
+                  <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-bold text-amber-950">
+                      Conflict Detected: {conflicts.appointments.length} patient(s) already booked on {formatDate(`${conflicts.date}T12:00:00Z`)}
+                    </p>
+                    <p className="text-xs text-amber-800 mt-0.5">
+                      Confirming will cancel their bookings and automatically email each patient alternative slots.
+                    </p>
+                  </div>
+                </div>
+
+                <ul className="rounded-lg bg-white/70 p-3 border border-amber-200 space-y-1.5 text-xs text-amber-900">
                   {conflicts.appointments.map((a) => (
-                    <li key={a.id}>
-                      {formatDateTime(a.startsAt)} — {a.patientName}
+                    <li key={a.id} className="flex items-center justify-between">
+                      <span className="font-semibold">{a.patientName}</span>
+                      <span className="font-mono text-2xs text-amber-700">{formatDateTime(a.startsAt)}</span>
                     </li>
                   ))}
                 </ul>
-                <p className="mt-3 text-sm text-amber-800">
-                  Confirming cancels these appointments and emails each patient with your next available slots.
-                  This cannot be undone.
-                </p>
-                <div className="mt-3 flex gap-2">
-                  <button type="button" className="btn-danger" disabled={busy} onClick={() => submit(null, true)}>
-                    {busy ? 'Cancelling…' : 'Cancel them and mark leave'}
+
+                <div className="flex flex-wrap gap-2 pt-1">
+                  <button
+                    type="button"
+                    className="btn-danger text-xs"
+                    disabled={busy}
+                    onClick={() => submit(null, true)}
+                  >
+                    {busy ? 'Processing Cancellations…' : 'Confirm & Notify Affected Patients'}
                   </button>
-                  <button type="button" className="btn-secondary" onClick={() => setConflicts(null)}>
-                    Keep appointments
+                  <button
+                    type="button"
+                    className="btn-secondary text-xs"
+                    onClick={() => setConflicts(null)}
+                  >
+                    Cancel Action
                   </button>
                 </div>
               </div>
             ) : (
-              <button type="submit" className="btn-primary" disabled={busy || !form.date}>
-                {busy ? 'Checking…' : 'Mark as leave'}
+              <button
+                type="submit"
+                className="btn-primary text-xs"
+                disabled={busy || !form.date}
+              >
+                {busy ? 'Checking Conflicts…' : 'Schedule Leave Date'}
               </button>
             )}
           </form>
         </section>
 
-        <section>
-          <h2 className="mb-3 font-semibold text-slate-900">Scheduled leave</h2>
+        {/* Existing Scheduled Leave List */}
+        <section className="space-y-3">
+          <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+            <Calendar className="w-4 h-4 text-teal-600" />
+            Active Scheduled Leaves
+          </h2>
+
           {!leave ? (
-            <Spinner />
+            <Spinner label="Loading scheduled leaves…" />
           ) : leave.length === 0 ? (
-            <EmptyState title="No leave scheduled" description="Your working hours apply on every day." />
+            <EmptyState
+              icon={Calendar}
+              title="No upcoming leaves scheduled"
+              description="Your normal clinic working hours apply on all upcoming dates."
+            />
           ) : (
-            <ul className="card divide-y divide-slate-100">
+            <div className="card divide-y divide-slate-100 overflow-hidden">
               {leave.map((l) => (
-                <li key={l.id} className="flex items-center justify-between gap-4 p-4">
-                  <div>
-                    <p className="font-medium text-slate-900">{formatDate(l.date)}</p>
-                    {l.reason && <p className="text-sm text-slate-500">{l.reason}</p>}
+                <div key={l.id} className="flex items-center justify-between gap-4 p-4 hover:bg-slate-50/60 transition-colors">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-700 font-bold text-xs border border-amber-200/60">
+                      <CalendarX className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <p className="font-bold text-sm text-slate-900">{formatDate(l.date)}</p>
+                      {l.reason ? (
+                        <p className="text-xs text-slate-500">{l.reason}</p>
+                      ) : (
+                        <p className="text-2xs text-slate-400 italic">No reason specified</p>
+                      )}
+                    </div>
                   </div>
-                  <button type="button" className="btn-ghost text-red-600" onClick={() => remove(l.id)}>
-                    Remove
+
+                  <button
+                    type="button"
+                    className="btn-ghost text-xs text-red-600 hover:bg-red-50 hover:text-red-700"
+                    onClick={() => remove(l.id)}
+                    title="Remove leave"
+                  >
+                    <Trash2 className="w-4 h-4" />
                   </button>
-                </li>
+                </div>
               ))}
-            </ul>
+            </div>
           )}
         </section>
       </div>
-    </>
+    </div>
   );
 }

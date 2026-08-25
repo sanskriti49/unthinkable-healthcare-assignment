@@ -1,8 +1,21 @@
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { api } from '../../lib/api.js';
 import { DAY_NAMES } from '../../lib/format.js';
-import { ErrorBanner, Field, PageHeader, Spinner } from '../../components/ui.jsx';
+import { ErrorBanner, Field, PageHeader, Spinner, Badge } from '../../components/ui.jsx';
 import CalendarConnect from '../../components/CalendarConnect.jsx';
+import { useToast } from '../../components/Toast.jsx';
+import {
+  User,
+  Clock,
+  CheckCircle2,
+  Calendar,
+  Save,
+  Plus,
+  Trash2,
+  Stethoscope,
+  MapPin,
+  FileText,
+} from 'lucide-react';
 
 export default function DoctorProfile() {
   const [doctor, setDoctor] = useState(null);
@@ -10,6 +23,7 @@ export default function DoctorProfile() {
   const [error, setError] = useState(null);
   const [saved, setSaved] = useState(null);
   const [busy, setBusy] = useState(false);
+  const { toast } = useToast();
 
   useEffect(() => {
     api
@@ -39,6 +53,7 @@ export default function DoctorProfile() {
         isAcceptingPatients: doctor.isAcceptingPatients,
       });
       setDoctor((d) => ({ ...d, ...updated }));
+      toast('Public profile updated successfully!');
       setSaved('Profile saved.');
     } catch (err) {
       setError(err);
@@ -53,7 +68,8 @@ export default function DoctorProfile() {
     setError(null);
     try {
       await api.put('/doctor/working-hours', { hours });
-      setSaved('Working hours updated. New slots are available immediately.');
+      toast('Working hours updated! New slot grid generated.');
+      setSaved('Working hours updated.');
     } catch (err) {
       setError(err);
     } finally {
@@ -62,87 +78,107 @@ export default function DoctorProfile() {
   }
 
   if (error && !doctor) return <ErrorBanner error={error} />;
-  if (!doctor) return <Spinner />;
+  if (!doctor) return <Spinner label="Loading doctor profile…" />;
 
   return (
-    <>
-      <PageHeader title="Your profile" description="What patients see, and when you are available." />
+    <div className="space-y-6 animate-in fade-in duration-200">
+      <PageHeader
+        title="Doctor Profile &amp; Clinic Hours"
+        description="Manage patient-facing qualifications, bio, consultation room, and recurring working hours."
+        icon={User}
+      />
 
-      <ErrorBanner error={error} className="mb-4" />
+      <ErrorBanner error={error} />
       {saved && (
-        <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
-          {saved}
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50/90 p-3 text-xs text-emerald-800 flex items-center gap-2">
+          <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+          <span>{saved}</span>
         </div>
       )}
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <form onSubmit={saveProfile} className="card space-y-4 p-5">
-          <h2 className="font-semibold text-slate-900">Public profile</h2>
+        {/* Left: Profile Form */}
+        <form onSubmit={saveProfile} className="card p-6 border-slate-200/80 bg-white space-y-4">
+          <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+            <Stethoscope className="w-4 h-4 text-teal-600" />
+            Public Doctor Profile
+          </h2>
 
-          <div className="rounded-lg bg-slate-50 p-3 text-sm">
-            <p className="font-medium text-slate-800">Dr {doctor.user.fullName}</p>
-            <p className="text-slate-500">
-              {doctor.specialisation} · {doctor.slotDurationMinutes} minute slots
-            </p>
-            <p className="mt-1 text-xs text-slate-400">
-              Name, specialisation and slot length are set by the administrator.
+          <div className="rounded-xl bg-slate-50 p-4 border border-slate-100 space-y-1">
+            <div className="flex items-center justify-between">
+              <p className="font-bold text-sm text-slate-900">Dr. {doctor.user.fullName}</p>
+              <Badge tone="brand">{doctor.slotDurationMinutes} min slots</Badge>
+            </div>
+            <p className="text-xs font-semibold text-teal-700">{doctor.specialisation}</p>
+            <p className="text-2xs text-slate-400">
+              Specialisation and slot duration are managed by clinic administration.
             </p>
           </div>
 
-          <Field label="Qualifications">
+          <Field label="Medical Qualifications">
             <input
-              className="input"
+              className="input text-xs"
               value={doctor.qualifications ?? ''}
               onChange={(e) => setDoctor({ ...doctor, qualifications: e.target.value })}
+              placeholder="e.g. MBBS, MD (Internal Medicine), FACP"
             />
           </Field>
 
-          <Field label="Room number">
+          <Field label="Consultation Room / OPD Location">
             <input
-              className="input"
+              className="input text-xs"
               value={doctor.roomNumber ?? ''}
               onChange={(e) => setDoctor({ ...doctor, roomNumber: e.target.value })}
+              placeholder="e.g. 204"
             />
           </Field>
 
-          <Field label="About you" hint="Shown on your card in patient search.">
+          <Field label="Professional Bio" hint="Displayed on your doctor card in patient search.">
             <textarea
               rows={4}
-              className="input"
+              className="input text-xs"
               value={doctor.bio ?? ''}
               onChange={(e) => setDoctor({ ...doctor, bio: e.target.value })}
+              placeholder="Specialist in preventive care, hypertension, and lifestyle medicine with over 10 years of clinical experience."
             />
           </Field>
 
-          <label className="flex items-center gap-2 text-sm text-slate-700">
+          <label className="flex items-center gap-2.5 text-xs font-medium text-slate-700 pt-1 cursor-pointer">
             <input
               type="checkbox"
-              className="h-4 w-4 rounded border-slate-300 text-brand-600"
+              className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500 cursor-pointer"
               checked={doctor.isAcceptingPatients}
               onChange={(e) => setDoctor({ ...doctor, isAcceptingPatients: e.target.checked })}
             />
-            Accepting new bookings
+            <span>Currently accepting new patient bookings</span>
           </label>
 
-          <button type="submit" className="btn-primary" disabled={busy}>
-            Save profile
-          </button>
+          <div className="pt-2">
+            <button type="submit" className="btn-primary text-xs" disabled={busy}>
+              <Save className="w-3.5 h-3.5" />
+              {busy ? 'Saving…' : 'Save Profile Changes'}
+            </button>
+          </div>
         </form>
 
+        {/* Right: Working Hours & Calendar Sync */}
         <div className="space-y-6">
-          <form onSubmit={saveHours} className="card space-y-4 p-5">
+          <form onSubmit={saveHours} className="card p-6 border-slate-200/80 bg-white space-y-4">
             <div>
-              <h2 className="font-semibold text-slate-900">Working hours</h2>
-              <p className="text-sm text-slate-500">
-                Slots are generated inside these windows on a {doctor.slotDurationMinutes}-minute grid.
+              <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <Clock className="w-4 h-4 text-teal-600" />
+                Weekly Working Hours
+              </h2>
+              <p className="text-xs text-slate-500 mt-1">
+                Patients book slots generated on your {doctor.slotDurationMinutes}-minute grid within these hours.
               </p>
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-2.5">
               {hours.map((h, i) => (
-                <div key={i} className="flex items-center gap-2">
+                <div key={i} className="flex items-center gap-2 rounded-lg bg-slate-50 p-2 border border-slate-100">
                   <select
-                    className="input flex-1"
+                    className="input text-xs flex-1 py-1"
                     value={h.dayOfWeek}
                     onChange={(e) => {
                       const next = [...hours];
@@ -156,7 +192,7 @@ export default function DoctorProfile() {
                   </select>
                   <input
                     type="time"
-                    className="input w-32"
+                    className="input text-xs w-28 py-1"
                     value={h.startTime}
                     onChange={(e) => {
                       const next = [...hours];
@@ -164,9 +200,10 @@ export default function DoctorProfile() {
                       setHours(next);
                     }}
                   />
+                  <span className="text-xs text-slate-400">to</span>
                   <input
                     type="time"
-                    className="input w-32"
+                    className="input text-xs w-28 py-1"
                     value={h.endTime}
                     onChange={(e) => {
                       const next = [...hours];
@@ -176,32 +213,36 @@ export default function DoctorProfile() {
                   />
                   <button
                     type="button"
-                    className="btn-ghost text-red-600"
+                    className="btn-ghost p-1 text-slate-400 hover:text-red-600"
                     onClick={() => setHours(hours.filter((_, j) => j !== i))}
-                    aria-label="Remove window"
+                    title="Remove window"
                   >
-                    ✕
+                    <Trash2 className="w-4 h-4" />
                   </button>
                 </div>
               ))}
             </div>
 
-            <button
-              type="button"
-              className="btn-secondary"
-              onClick={() => setHours([...hours, { dayOfWeek: 1, startTime: '09:00', endTime: '13:00' }])}
-            >
-              + Add a window
-            </button>
+            <div className="flex items-center justify-between pt-2">
+              <button
+                type="button"
+                className="btn-secondary text-xs"
+                onClick={() => setHours([...hours, { dayOfWeek: 1, startTime: '09:00', endTime: '13:00' }])}
+              >
+                <Plus className="w-3.5 h-3.5" />
+                Add Time Window
+              </button>
 
-            <button type="submit" className="btn-primary w-full" disabled={busy}>
-              Save working hours
-            </button>
+              <button type="submit" className="btn-primary text-xs" disabled={busy}>
+                <Save className="w-3.5 h-3.5" />
+                Save Working Hours
+              </button>
+            </div>
           </form>
 
           <CalendarConnect />
         </div>
       </div>
-    </>
+    </div>
   );
 }

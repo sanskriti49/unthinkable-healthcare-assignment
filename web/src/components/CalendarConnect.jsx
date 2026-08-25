@@ -1,14 +1,8 @@
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { api } from '../lib/api.js';
-import { ErrorBanner } from './ui.jsx';
+import { ErrorBanner, Badge } from './ui.jsx';
+import { Calendar, CheckCircle2, AlertCircle, ExternalLink, Link2, Unlink } from 'lucide-react';
 
-/**
- * Google Calendar connection panel.
- *
- * Shown to both doctors and patients. When the server has no Google
- * credentials this renders as an explanatory note rather than a dead button —
- * calendar sync is optional and the rest of the product works without it.
- */
 export default function CalendarConnect() {
   const [status, setStatus] = useState(null);
   const [error, setError] = useState(null);
@@ -47,36 +41,49 @@ export default function CalendarConnect() {
   if (!status) return null;
 
   return (
-    <section className="card p-5">
-      <h2 className="font-semibold text-slate-900">Google Calendar</h2>
+    <section className="card p-6 border-slate-200/80 bg-white">
+      <div className="flex items-center justify-between">
+        <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+          <Calendar className="w-4 h-4 text-teal-600" />
+          Google Calendar Sync
+        </h2>
+        {status.configured && (
+          <Badge tone={status.connected ? 'green' : 'slate'}>
+            {status.connected ? 'Sync Connected' : 'Disconnected'}
+          </Badge>
+        )}
+      </div>
+
       <ErrorBanner error={error} className="mt-3" />
 
       {!status.configured ? (
-        <p className="mt-2 text-sm text-slate-500">
-          Calendar sync is not configured on this server. An administrator can enable it by setting{' '}
-          <code className="rounded bg-slate-100 px-1 font-mono text-xs">GOOGLE_CLIENT_ID</code> and{' '}
-          <code className="rounded bg-slate-100 px-1 font-mono text-xs">GOOGLE_CLIENT_SECRET</code>.
-          Appointments work normally without it.
+        <p className="mt-2 text-xs text-slate-500 leading-relaxed bg-slate-50 p-3 rounded-lg border border-slate-100">
+          Calendar sync is optional on this deployment. An administrator can enable it by setting{' '}
+          <code className="rounded bg-slate-200/60 px-1 py-0.5 font-mono text-2xs">GOOGLE_CLIENT_ID</code> and{' '}
+          <code className="rounded bg-slate-200/60 px-1 py-0.5 font-mono text-2xs">GOOGLE_CLIENT_SECRET</code> in{' '}
+          <code className="font-mono text-2xs">server/.env</code>.
         </p>
       ) : status.connected ? (
-        <>
-          <p className="mt-2 text-sm text-emerald-700">
-            Connected. Appointments are added to your calendar automatically, and updated or removed when they
-            change.
+        <div className="mt-3 space-y-3">
+          <p className="text-xs text-emerald-800 bg-emerald-50 p-3 rounded-lg border border-emerald-200 flex items-start gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+            <span>Calendar sync active. All confirmed appointments sync automatically to your personal Google Calendar.</span>
           </p>
-          <button type="button" className="btn-secondary mt-3" onClick={disconnect} disabled={busy}>
-            Disconnect
+          <button type="button" className="btn-secondary text-xs" onClick={disconnect} disabled={busy}>
+            <Unlink className="w-3.5 h-3.5 text-slate-500" />
+            Disconnect Google Calendar
           </button>
-        </>
+        </div>
       ) : (
-        <>
-          <p className="mt-2 text-sm text-slate-600">
-            Connect your calendar and every appointment will appear there automatically.
+        <div className="mt-3 space-y-3">
+          <p className="text-xs text-slate-600">
+            Connect your personal Google Calendar to synchronize appointment bookings, reschedules, and cancellations in real time.
           </p>
-          <button type="button" className="btn-primary mt-3" onClick={connect} disabled={busy}>
-            {busy ? 'Redirecting…' : 'Connect Google Calendar'}
+          <button type="button" className="btn-primary text-xs" onClick={connect} disabled={busy}>
+            <Link2 className="w-3.5 h-3.5" />
+            {busy ? 'Connecting…' : 'Connect with Google Calendar'}
           </button>
-        </>
+        </div>
       )}
     </section>
   );

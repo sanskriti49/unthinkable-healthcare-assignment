@@ -1,5 +1,6 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { AuthProvider, useAuth, homeFor } from './lib/auth.jsx';
+import { ToastProvider } from './components/Toast.jsx';
 import Layout from './components/Layout.jsx';
 import RequireRole from './components/RequireRole.jsx';
 import { Spinner } from './components/ui.jsx';
@@ -29,7 +30,7 @@ import AdminOperations from './pages/admin/Operations.jsx';
 /** Sends a signed-in user to their portal, and everyone else to the login page. */
 function RootRedirect() {
   const { user, loading } = useAuth();
-  if (loading) return <Spinner label="Loading…" />;
+  if (loading) return <Spinner label="Loading clinic session…" />;
   return <Navigate to={user ? homeFor(user.role) : '/login'} replace />;
 }
 
@@ -37,10 +38,10 @@ function NotFound() {
   const { user } = useAuth();
   return (
     <div className="mx-auto max-w-md py-24 text-center">
-      <h1 className="text-2xl font-bold text-slate-900">Page not found</h1>
-      <p className="mt-2 text-sm text-slate-500">That page does not exist.</p>
+      <h1 className="text-3xl font-extrabold text-slate-900">404</h1>
+      <p className="mt-2 text-sm text-slate-500">The page you are looking for does not exist.</p>
       <a href={user ? homeFor(user.role) : '/login'} className="btn-primary mt-6">
-        Go back
+        Return to Dashboard
       </a>
     </div>
   );
@@ -49,66 +50,68 @@ function NotFound() {
 export default function App() {
   return (
     <BrowserRouter>
-      <AuthProvider>
-        <Routes>
-          <Route path="/" element={<RootRedirect />} />
-          <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
-          <Route path="/calendar/connected" element={<CalendarConnected />} />
+      <ToastProvider>
+        <AuthProvider>
+          <Routes>
+            <Route path="/" element={<RootRedirect />} />
+            <Route path="/login" element={<Login />} />
+            <Route path="/register" element={<Register />} />
+            <Route path="/calendar/connected" element={<CalendarConnected />} />
 
-          {/* Patient portal */}
-          <Route
-            path="/patient"
-            element={
-              <RequireRole roles={['PATIENT']}>
-                <Layout />
-              </RequireRole>
-            }
-          >
-            <Route index element={<PatientDashboard />} />
-            <Route path="find" element={<FindDoctor />} />
-            <Route path="doctors/:doctorId" element={<BookDoctor />} />
-            <Route path="appointments" element={<PatientAppointments />} />
-            <Route path="appointments/:appointmentId" element={<PatientAppointmentDetail />} />
-            <Route path="medications" element={<Medications />} />
-          </Route>
+            {/* Patient portal */}
+            <Route
+              path="/patient"
+              element={
+                <RequireRole roles={['PATIENT']}>
+                  <Layout />
+                </RequireRole>
+              }
+            >
+              <Route index element={<PatientDashboard />} />
+              <Route path="find" element={<FindDoctor />} />
+              <Route path="doctors/:doctorId" element={<BookDoctor />} />
+              <Route path="appointments" element={<PatientAppointments />} />
+              <Route path="appointments/:appointmentId" element={<PatientAppointmentDetail />} />
+              <Route path="medications" element={<Medications />} />
+            </Route>
 
-          {/* Doctor portal */}
-          <Route
-            path="/doctor"
-            element={
-              <RequireRole roles={['DOCTOR']}>
-                <Layout />
-              </RequireRole>
-            }
-          >
-            <Route index element={<DoctorToday />} />
-            <Route path="schedule" element={<DoctorSchedule />} />
-            <Route path="leave" element={<DoctorLeave />} />
-            <Route path="profile" element={<DoctorProfile />} />
-            <Route path="appointments/:appointmentId" element={<DoctorToday />} />
-          </Route>
+            {/* Doctor portal */}
+            <Route
+              path="/doctor"
+              element={
+                <RequireRole roles={['DOCTOR']}>
+                  <Layout />
+                </RequireRole>
+              }
+            >
+              <Route index element={<DoctorToday />} />
+              <Route path="schedule" element={<DoctorSchedule />} />
+              <Route path="leave" element={<DoctorLeave />} />
+              <Route path="profile" element={<DoctorProfile />} />
+              <Route path="appointments/:appointmentId" element={<DoctorToday />} />
+            </Route>
 
-          {/* Administration */}
-          <Route
-            path="/admin"
-            element={
-              <RequireRole roles={['ADMIN']}>
-                <Layout />
-              </RequireRole>
-            }
-          >
-            <Route index element={<AdminDashboard />} />
-            <Route path="doctors" element={<AdminDoctors />} />
-            <Route path="doctors/new" element={<AdminDoctorForm />} />
-            <Route path="doctors/:doctorId" element={<AdminDoctorForm />} />
-            <Route path="appointments" element={<AdminAppointments />} />
-            <Route path="operations" element={<AdminOperations />} />
-          </Route>
+            {/* Administration */}
+            <Route
+              path="/admin"
+              element={
+                <RequireRole roles={['ADMIN']}>
+                  <Layout />
+                </RequireRole>
+              }
+            >
+              <Route index element={<AdminDashboard />} />
+              <Route path="doctors" element={<AdminDoctors />} />
+              <Route path="doctors/new" element={<AdminDoctorForm />} />
+              <Route path="doctors/:doctorId" element={<AdminDoctorForm />} />
+              <Route path="appointments" element={<AdminAppointments />} />
+              <Route path="operations" element={<AdminOperations />} />
+            </Route>
 
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </AuthProvider>
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </AuthProvider>
+      </ToastProvider>
     </BrowserRouter>
   );
 }

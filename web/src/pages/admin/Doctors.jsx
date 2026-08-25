@@ -1,12 +1,27 @@
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../lib/api.js';
 import { DAY_SHORT, formatFee } from '../../lib/format.js';
 import { Badge, EmptyState, ErrorBanner, PageHeader, Spinner } from '../../components/ui.jsx';
+import { useToast } from '../../components/Toast.jsx';
+import {
+  Users,
+  Plus,
+  Stethoscope,
+  Clock,
+  Coins,
+  Calendar,
+  Edit,
+  UserX,
+  ShieldCheck,
+  Search,
+} from 'lucide-react';
 
 export default function AdminDoctors() {
   const [doctors, setDoctors] = useState(null);
   const [error, setError] = useState(null);
+  const [search, setSearch] = useState('');
+  const { toast } = useToast();
 
   const load = () => api.get('/admin/doctors').then((r) => setDoctors(r.doctors)).catch(setError);
 
@@ -17,70 +32,113 @@ export default function AdminDoctors() {
   async function deactivate(doctor) {
     if (
       !window.confirm(
-        `Deactivate Dr ${doctor.user.fullName}? They can no longer sign in and will not appear in search. Their appointment history is kept.`
+        `Deactivate Dr. ${doctor.user.fullName}? They will no longer appear in patient search. Their history remains preserved.`
       )
     )
       return;
     try {
       const result = await api.del(`/admin/doctors/${doctor.id}`);
       if (result.warning) window.alert(result.warning);
+      toast(`Dr. ${doctor.user.fullName} deactivated.`);
       await load();
     } catch (err) {
       setError(err);
     }
   }
 
+  const filtered = (doctors || []).filter(
+    (d) =>
+      d.user.fullName.toLowerCase().includes(search.toLowerCase()) ||
+      d.specialisation.toLowerCase().includes(search.toLowerCase()) ||
+      d.user.email.toLowerCase().includes(search.toLowerCase())
+  );
+
   return (
-    <>
+    <div className="space-y-6 animate-in fade-in duration-200">
       <PageHeader
-        title="Doctors"
-        description="Profiles, specialisations, slot lengths and working hours."
-        action={<Link to="/admin/doctors/new" className="btn-primary">Add a doctor</Link>}
+        title="Doctor Profiles &amp; Medical Staff"
+        description="Configure specialists, slot durations, consultation fees, and recurring clinic shifts."
+        icon={Users}
+        action={
+          <Link to="/admin/doctors/new" className="btn-primary text-xs">
+            <Plus className="w-3.5 h-3.5" />
+            Add Doctor Profile
+          </Link>
+        }
       />
 
-      <ErrorBanner error={error} className="mb-4" />
+      {/* Search Header */}
+      <div className="card p-4">
+        <div className="relative">
+          <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
+          <input
+            className="input pl-10 text-xs"
+            placeholder="Search doctors by name, specialty, or email..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+      </div>
+
+      <ErrorBanner error={error} />
 
       {!doctors ? (
-        <Spinner />
-      ) : doctors.length === 0 ? (
-        <EmptyState title="No doctors yet" action={<Link to="/admin/doctors/new" className="btn-primary">Add the first</Link>} />
+        <Spinner label="Loading doctor profiles…" />
+      ) : filtered.length === 0 ? (
+        <EmptyState
+          icon={Users}
+          title="No doctor profiles found"
+          action={
+            <Link to="/admin/doctors/new" className="btn-primary text-xs">
+              <Plus className="w-3.5 h-3.5" />
+              Add First Doctor
+            </Link>
+          }
+        />
       ) : (
-        <div className="space-y-3">
-          {doctors.map((doctor) => (
-            <article key={doctor.id} className="card flex flex-wrap items-start justify-between gap-4 p-5">
+        <div className="grid gap-4">
+          {filtered.map((doctor) => (
+            <article
+              key={doctor.id}
+              className="card p-5 border-slate-200/80 bg-white card-hover flex flex-col md:flex-row md:items-center justify-between gap-4"
+            >
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
-                  <h2 className="font-semibold text-slate-900">Dr {doctor.user.fullName}</h2>
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-teal-50 text-teal-700 font-bold text-xs border border-teal-200/60">
+                    <Stethoscope className="w-4 h-4" />
+                  </div>
+                  <h2 className="font-bold text-base text-slate-900">Dr. {doctor.user.fullName}</h2>
                   <Badge tone="brand">{doctor.specialisation}</Badge>
                   {!doctor.user.isActive && <Badge tone="red">Deactivated</Badge>}
                   {doctor.user.isActive && !doctor.isAcceptingPatients && (
-                    <Badge tone="amber">Not accepting</Badge>
+                    <Badge tone="amber">Not Accepting</Badge>
                   )}
                 </div>
-                <p className="text-sm text-slate-500">{doctor.user.email}</p>
+                <p className="text-xs text-slate-500 mt-1 pl-11">{doctor.user.email}</p>
 
-                <dl className="mt-3 grid gap-x-6 gap-y-1 text-xs text-slate-600 sm:grid-cols-2">
-                  <div className="flex gap-2">
-                    <dt className="font-medium text-slate-500">Slot length</dt>
-                    <dd>{doctor.slotDurationMinutes} min</dd>
+                <dl className="mt-3 grid gap-x-6 gap-y-1.5 text-xs text-slate-600 sm:grid-cols-4 pl-11">
+                  <div>
+                    <dt className="text-2xs text-slate-400 font-medium uppercase">Slot Grid</dt>
+                    <dd className="font-bold text-slate-800">{doctor.slotDurationMinutes} mins</dd>
                   </div>
-                  <div className="flex gap-2">
-                    <dt className="font-medium text-slate-500">Fee</dt>
-                    <dd>{formatFee(doctor.consultationFee)}</dd>
+                  <div>
+                    <dt className="text-2xs text-slate-400 font-medium uppercase">Consultation Fee</dt>
+                    <dd className="font-bold text-slate-800">{formatFee(doctor.consultationFee)}</dd>
                   </div>
-                  <div className="flex gap-2">
-                    <dt className="font-medium text-slate-500">Horizon</dt>
-                    <dd>{doctor.bookingHorizonDays} days</dd>
+                  <div>
+                    <dt className="text-2xs text-slate-400 font-medium uppercase">Booking Horizon</dt>
+                    <dd className="font-bold text-slate-800">{doctor.bookingHorizonDays} days</dd>
                   </div>
-                  <div className="flex gap-2">
-                    <dt className="font-medium text-slate-500">Appointments</dt>
-                    <dd>{doctor._count.appointments}</dd>
+                  <div>
+                    <dt className="text-2xs text-slate-400 font-medium uppercase">Bookings Handled</dt>
+                    <dd className="font-bold text-teal-700">{doctor._count.appointments} visits</dd>
                   </div>
-                  <div className="col-span-full flex gap-2">
-                    <dt className="font-medium text-slate-500">Hours</dt>
-                    <dd>
+
+                  <div className="col-span-full pt-1">
+                    <dt className="text-2xs text-slate-400 font-medium uppercase">Weekly Working Hours</dt>
+                    <dd className="text-xs text-slate-700 font-mono">
                       {doctor.workingHours.length === 0
-                        ? 'Not set — no slots will be offered'
+                        ? 'No shifts scheduled'
                         : doctor.workingHours
                             .map((h) => `${DAY_SHORT[h.dayOfWeek]} ${h.startTime}–${h.endTime}`)
                             .join(' · ')}
@@ -89,10 +147,18 @@ export default function AdminDoctors() {
                 </dl>
               </div>
 
-              <div className="flex shrink-0 gap-2">
-                <Link to={`/admin/doctors/${doctor.id}`} className="btn-secondary">Edit</Link>
+              <div className="flex items-center gap-2 shrink-0 pt-2 md:pt-0 border-t md:border-t-0 border-slate-100">
+                <Link to={`/admin/doctors/${doctor.id}`} className="btn-secondary text-xs">
+                  <Edit className="w-3.5 h-3.5" />
+                  Edit Settings
+                </Link>
                 {doctor.user.isActive && (
-                  <button type="button" className="btn-danger" onClick={() => deactivate(doctor)}>
+                  <button
+                    type="button"
+                    className="btn-danger text-xs"
+                    onClick={() => deactivate(doctor)}
+                  >
+                    <UserX className="w-3.5 h-3.5" />
                     Deactivate
                   </button>
                 )}
@@ -101,6 +167,6 @@ export default function AdminDoctors() {
           ))}
         </div>
       )}
-    </>
+    </div>
   );
 }

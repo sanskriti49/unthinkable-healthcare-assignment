@@ -1,10 +1,20 @@
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../lib/api.js';
 import { formatFee, DAY_SHORT } from '../../lib/format.js';
 import { ErrorBanner, PageHeader, Spinner, EmptyState, Badge } from '../../components/ui.jsx';
+import {
+  Search,
+  Stethoscope,
+  Clock,
+  Coins,
+  MapPin,
+  CalendarCheck,
+  ChevronRight,
+  Filter,
+  Sparkles,
+} from 'lucide-react';
 
-/** Collapse per-day windows into "Mon–Fri 09:00–17:00"-style summaries. */
 function summariseHours(workingHours) {
   if (!workingHours?.length) return 'Hours not published';
   const byDay = new Map();
@@ -31,7 +41,6 @@ export default function FindDoctor() {
   useEffect(() => {
     const controller = new AbortController();
     setDoctors(null);
-    // Debounced so typing in the search box does not fire a request per keystroke.
     const timer = setTimeout(() => {
       api
         .get('/doctors', { query: { ...filter, acceptingOnly: 'true' }, signal: controller.signal })
@@ -48,79 +57,147 @@ export default function FindDoctor() {
   }, [filter.specialisation, filter.q]);
 
   return (
-    <>
-      <PageHeader title="Find a doctor" description="Search by specialisation, then pick a time that suits you." />
+    <div className="space-y-6 animate-in fade-in duration-200">
+      <PageHeader
+        title="Find a Specialist Doctor"
+        description="Filter by medical specialty, view clinic hours & fees, and pick an appointment slot."
+        icon={Search}
+      />
 
-      <div className="card mb-6 flex flex-wrap gap-4 p-4">
-        <div className="min-w-56 flex-1">
-          <label className="label" htmlFor="spec">Specialisation</label>
-          <select
-            id="spec"
-            className="input"
-            value={filter.specialisation}
-            onChange={(e) => setFilter({ ...filter, specialisation: e.target.value })}
+      {/* Search & Filter Header Card */}
+      <div className="card p-5 space-y-4">
+        {/* Quick Filter Specialty Pills */}
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+          <button
+            type="button"
+            onClick={() => setFilter({ ...filter, specialisation: '' })}
+            className={`rounded-full px-3.5 py-1.5 text-xs font-semibold whitespace-nowrap transition-all ${
+              filter.specialisation === ''
+                ? 'bg-teal-600 text-white shadow-xs'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200/80'
+            }`}
           >
-            <option value="">All specialisations</option>
-            {specialisations.map((s) => (
-              <option key={s.name} value={s.name}>
-                {s.name} ({s.doctorCount})
-              </option>
-            ))}
-          </select>
+            All Specialisations
+          </button>
+          {specialisations.map((s) => (
+            <button
+              key={s.name}
+              type="button"
+              onClick={() => setFilter({ ...filter, specialisation: s.name })}
+              className={`rounded-full px-3.5 py-1.5 text-xs font-semibold whitespace-nowrap transition-all ${
+                filter.specialisation === s.name
+                  ? 'bg-teal-600 text-white shadow-xs'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200/80'
+              }`}
+            >
+              {s.name} ({s.doctorCount})
+            </button>
+          ))}
         </div>
-        <div className="min-w-56 flex-1">
-          <label className="label" htmlFor="q">Search</label>
+
+        {/* Search by doctor name or qualification */}
+        <div className="relative">
+          <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
           <input
             id="q"
-            className="input"
-            placeholder="Name or qualification"
+            className="input pl-10 text-sm"
+            placeholder="Search by doctor name, specialisation, or qualifications (e.g. Mehta, MD, Cardiology)..."
             value={filter.q}
             onChange={(e) => setFilter({ ...filter, q: e.target.value })}
           />
         </div>
       </div>
 
-      <ErrorBanner error={error} className="mb-4" />
+      <ErrorBanner error={error} />
 
       {!doctors ? (
-        <Spinner />
+        <Spinner label="Searching available doctors…" />
       ) : doctors.length === 0 ? (
-        <EmptyState title="No doctors match" description="Try a different specialisation or clear the search." />
+        <EmptyState
+          icon={Stethoscope}
+          title="No doctors match your query"
+          description="Try selecting a different specialty or clearing the search query."
+          action={
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={() => setFilter({ specialisation: '', q: '' })}
+            >
+              Reset Filters
+            </button>
+          }
+        />
       ) : (
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid gap-5 md:grid-cols-2">
           {doctors.map((doctor) => (
-            <article key={doctor.id} className="card flex flex-col p-5">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <h2 className="text-lg font-semibold text-slate-900">Dr {doctor.fullName}</h2>
-                  <p className="text-sm font-medium text-brand-700">{doctor.specialisation}</p>
-                  {doctor.qualifications && (
-                    <p className="text-xs text-slate-500">{doctor.qualifications}</p>
+            <article
+              key={doctor.id}
+              className="card p-6 card-hover flex flex-col justify-between border-slate-200/80 bg-white"
+            >
+              <div>
+                {/* Doctor Avatar & Header */}
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-start gap-3.5">
+                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-teal-50 text-teal-700 font-bold border border-teal-200/60 shadow-2xs">
+                      <Stethoscope className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <h2 className="text-lg font-bold text-slate-900">Dr. {doctor.fullName}</h2>
+                      <p className="text-xs font-semibold text-teal-700">{doctor.specialisation}</p>
+                      {doctor.qualifications && (
+                        <p className="text-2xs text-slate-500 font-medium">{doctor.qualifications}</p>
+                      )}
+                    </div>
+                  </div>
+                  <Badge tone="brand">{doctor.slotDurationMinutes} min slot</Badge>
+                </div>
+
+                {doctor.bio && (
+                  <p className="mt-3.5 text-xs text-slate-600 line-clamp-2 leading-relaxed">
+                    {doctor.bio}
+                  </p>
+                )}
+
+                {/* Details Badges */}
+                <div className="mt-4 grid grid-cols-2 gap-2 rounded-xl bg-slate-50/80 p-3 border border-slate-100 text-xs text-slate-600">
+                  <div className="flex items-center gap-2">
+                    <Coins className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <div>
+                      <span className="text-2xs text-slate-400 block">Consultation Fee</span>
+                      <span className="font-semibold text-slate-800">{formatFee(doctor.consultationFee)}</span>
+                    </div>
+                  </div>
+
+                  {doctor.roomNumber && (
+                    <div className="flex items-center gap-2">
+                      <MapPin className="w-4 h-4 text-sky-600 shrink-0" />
+                      <div>
+                        <span className="text-2xs text-slate-400 block">Location</span>
+                        <span className="font-semibold text-slate-800">Room {doctor.roomNumber}</span>
+                      </div>
+                    </div>
                   )}
                 </div>
-                <Badge tone="slate">{doctor.slotDurationMinutes} min</Badge>
+
+                <div className="mt-3 text-2xs text-slate-500 flex items-start gap-1.5">
+                  <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" />
+                  <span>{summariseHours(doctor.workingHours)}</span>
+                </div>
               </div>
 
-              {doctor.bio && <p className="mt-3 text-sm text-slate-600">{doctor.bio}</p>}
-
-              <dl className="mt-4 space-y-1 text-xs text-slate-500">
-                <div className="flex gap-2">
-                  <dt className="font-medium">Hours</dt>
-                  <dd>{summariseHours(doctor.workingHours)}</dd>
-                </div>
-                <div className="flex gap-2">
-                  <dt className="font-medium">Fee</dt>
-                  <dd>{formatFee(doctor.consultationFee)}</dd>
-                </div>
-              </dl>
-
-              <Link to={`/patient/doctors/${doctor.id}`} className="btn-primary mt-4 self-start">
-                See available slots
-              </Link>
+              <div className="mt-5 pt-3 border-t border-slate-100">
+                <Link
+                  to={`/patient/doctors/${doctor.id}`}
+                  className="btn-primary w-full justify-center"
+                >
+                  <CalendarCheck className="w-4 h-4" />
+                  Select Doctor &amp; Choose Slot
+                </Link>
+              </div>
             </article>
           ))}
         </div>
       )}
-    </>
+    </div>
   );
 }
