@@ -47,7 +47,24 @@ function isRetryable(err) {
   return ['AbortError', 'TimeoutError', 'FetchError'].includes(err?.name);
 }
 
+function cleanJson(str) {
+  let cleaned = String(str || '').trim();
+  if (cleaned.startsWith('```json')) cleaned = cleaned.slice(7);
+  else if (cleaned.startsWith('```')) cleaned = cleaned.slice(3);
+  if (cleaned.endsWith('```')) cleaned = cleaned.slice(0, -3);
+  return cleaned.trim();
+}
+
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+const GROQ_CANDIDATE_MODELS = [
+  env.llm.groqModel,
+  'openai/gpt-oss-120b',
+  'qwen/qwen3.6-27b',
+  'llama-3.3-70b-versatile',
+  'llama-3.1-70b-versatile',
+  'llama3-70b-8192',
+].filter(Boolean);
 
 /**
  * Execute structured output completion using Anthropic or Groq based on configured keys.
@@ -60,63 +77,74 @@ export async function completeStructured({ system, user, schema, purpose, maxTok
   // 1. Groq Completion
   if (provider === 'groq') {
     let lastError;
-    for (let attempt = 1; attempt <= env.llm.maxAttempts; attempt += 1) {
-      const startedAt = Date.now();
-      try {
-        const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${env.llm.groqApiKey}`,
-          },
-          body: JSON.stringify({
-            model: env.llm.groqModel,
-            temperature: 0.1,
-            max_tokens: maxTokens ?? env.llm.maxTokens,
-            response_format: { type: 'json_object' },
-            messages: [
-              {
-                role: 'system',
-                content: `${system}\n\nIMPORTANT: You must respond ONLY with a valid JSON object matching the required structure. Do not wrap in markdown quotes.`,
-              },
-              { role: 'user', content: user },
-            ],
-          }),
-          signal: AbortSignal.timeout(env.llm.timeoutMs),
-        });
 
-        if (!response.ok) {
-          const errBody = await response.text();
-          throw new Error(`Groq API returned ${response.status}: ${errBody}`);
+    // Deduplicate candidate models
+    const candidateModels = [...new Set(GROQ_CANDIDATE_MODELS)];
+
+    for (const modelName of candidateModels) {
+      for (let attempt = 1; attempt <= 2; attempt += 1) {
+        const startedAt = Date.now();
+        try {
+          const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${env.llm.groqApiKey}`,
+            },
+            body: JSON.stringify({
+              model: modelName,
+              temperature: 0.1,
+              max_tokens: maxTokens ?? env.llm.maxTokens,
+              response_format: { type: 'json_object' },
+              messages: [
+                {
+                  role: 'system',
+                  content: `${system}\n\nIMPORTANT: Return ONLY a valid JSON object matching the required schema. Do NOT include markdown fences.`,
+                },
+                { role: 'user', content: user },
+              ],
+            }),
+            signal: AbortSignal.timeout(env.llm.timeoutMs),
+          });
+
+          if (!response.ok) {
+            const errBody = await response.text();
+            if (response.status === 404) {
+              // Model not found on this API key, try next candidate model
+              lastError = new Error(`Groq model ${modelName} 404: ${errBody}`);
+              break;
+            }
+            throw new Error(`Groq API returned ${response.status}: ${errBody}`);
+          }
+
+          const json = await response.json();
+          const rawContent = json.choices?.[0]?.message?.content;
+          if (!rawContent) throw new Error('Groq returned empty completion content');
+
+          const parsedJson = JSON.parse(cleanJson(rawContent));
+          const validated = schema.parse(parsedJson);
+
+          log.info('Groq completion ok', {
+            purpose,
+            attempt,
+            ms: Date.now() - startedAt,
+            model: modelName,
+            tokens: json.usage?.total_tokens,
+          });
+
+          return { data: validated, model: modelName, attempts: attempt };
+        } catch (err) {
+          lastError = err;
+          log.warn('Groq completion attempt failed', {
+            purpose,
+            model: modelName,
+            attempt,
+            error: err?.message,
+          });
+
+          if (attempt === 2) break;
+          await sleep(500);
         }
-
-        const json = await response.json();
-        const rawContent = json.choices?.[0]?.message?.content;
-        if (!rawContent) throw new Error('Groq returned empty completion content');
-
-        const parsedJson = JSON.parse(rawContent);
-        const validated = schema.parse(parsedJson);
-
-        log.info('Groq completion ok', {
-          purpose,
-          attempt,
-          ms: Date.now() - startedAt,
-          model: env.llm.groqModel,
-          tokens: json.usage?.total_tokens,
-        });
-
-        return { data: validated, model: env.llm.groqModel, attempts: attempt };
-      } catch (err) {
-        lastError = err;
-        log.warn('Groq completion failed', {
-          purpose,
-          attempt,
-          error: err?.message,
-        });
-
-        if (attempt === env.llm.maxAttempts) break;
-        const delay = 500 * 2 ** (attempt - 1);
-        await sleep(delay / 2 + Math.random() * (delay / 2));
       }
     }
 
